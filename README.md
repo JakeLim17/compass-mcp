@@ -77,6 +77,23 @@ Default `cost_bias` when unset = **cheap**.
 
 ---
 
+## Example prompts
+
+Paste into chat (or call `list_example_prompts`). Defaults below assume **save / cheap** (`cost_bias` unset or `cheap` / `prefer_cheaper`).
+
+| KO example | Save default (cheap) | Quality expect (`cost_bias: quality` / “최고 품질”) |
+|------------|----------------------|-----------------------------------------------------|
+| 로그인 문구 i18n 한 줄만 수정해줘 | Composer | Composer |
+| 대시보드 레이아웃 리팩터하고 히어로 섹션 CSS 정리해줘 | **Sonnet** (not Fable) | Fable (large redesign / premium) |
+| 결제 모듈 구조 설계랑 기술 선택 트레이드오프 정리해줘 | Grok | Grok |
+| CI 실패 재현해서 난해한 타입 에러 원인 찾아줘 | Codex (Terra) | Codex (Terra) |
+
+**Honest note:** Under save bias, normal UI maps to Sonnet; Fable is for large redesign or when the user asks for premium quality. Same KO string can therefore recommend Sonnet (save) vs Fable (quality).
+
+Source of truth for paste strings: `src/examples.ts` → `list_example_prompts`.
+
+---
+
 ## Project template
 
 ```bash

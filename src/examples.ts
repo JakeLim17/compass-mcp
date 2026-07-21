@@ -33,6 +33,7 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Refactor the dashboard layout and clean up the hero section CSS",
     tags: ["ui"],
     expected_primary: "Claude Sonnet",
+    note: "Save default → Sonnet. Quality expect / large redesign / premium → Fable (not the cheap primary).",
   },
   {
     category: "ui",
@@ -106,6 +107,8 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
 export const EXAMPLE_PROMPTS_META = {
   sticky:
     "Same context = keep adopted model (no re-ask). Context / task-type change = call recommend_model again and present primary + alternative on switch.",
+  save_vs_quality:
+    "Save/cheap default may map normal UI to Sonnet; quality expect (cost_bias quality / premium wording / large redesign) may escalate the same UI work to Fable. Document both honestly — do not claim Fable as the cheap primary.",
   honest_limit:
     "This MCP does not auto-switch the Cursor chat UI model. You still pick the chat model or pass a Task model slug.",
   categories: [
