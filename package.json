@@ -1,0 +1,34 @@
+{
+  "name": "compass-mcp",
+  "version": "0.3.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Compass MCP — ChronoCode model recommendation (start_session, recommend, sticky, weekly usage report, project config)",
+  "type": "module",
+  "bin": {
+    "compass-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "start:node": "node dist/server.js",
+    "setup": "bash scripts/setup.sh",
+    "install:local": "bash scripts/install.sh",
+    "smoke": "tsx scripts/smoke.ts",
+    "test": "tsx scripts/smoke.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "tsx": "^4.19.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

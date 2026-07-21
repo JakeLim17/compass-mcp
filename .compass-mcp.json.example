@@ -1,0 +1,10 @@
+{
+  "preferred_host": "cursor",
+  "default_tier": "low",
+  "blocked_models": [],
+  "cost_bias": "prefer_cheaper",
+  "usage_alert_thresholds": {
+    "high_tier_today": 3,
+    "heavy_today": 8
+  }
+}
