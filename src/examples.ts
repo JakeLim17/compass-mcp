@@ -26,22 +26,22 @@ export interface ExamplePrompt {
 }
 
 export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
-  // —— UI → Fable 5 ——
+  // —— UI → Sonnet (default save; Fable only for large redesign / premium) ——
   {
     category: "ui",
     ko: "대시보드 레이아웃 리팩터하고 히어로 섹션 CSS 정리해줘",
     en: "Refactor the dashboard layout and clean up the hero section CSS",
     tags: ["ui"],
-    expected_primary: "Fable 5",
+    expected_primary: "Claude Sonnet",
   },
   {
     category: "ui",
     ko: "랜딩 페이지 화면 UX 다듬고 컴포넌트 간격 맞춰줘",
     en: "Polish the landing page UX and align component spacing",
     tags: ["ui"],
-    expected_primary: "Fable 5",
+    expected_primary: "Claude Sonnet",
   },
-  // —— bug → GPT-5 Codex ——
+  // —— bug → GPT-5 Codex (Terra) ——
   {
     category: "bug",
     ko: "CI 실패 재현해서 난해한 타입 에러 원인 찾아줘",
@@ -84,22 +84,22 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Tiny hotfix: tidy a typo comment and a small lint warning",
     expected_primary: "Composer 2.5",
   },
-  // —— recommend again (sticky / context shift) ——
+  // —— recommend again ——
   {
     category: "recommend_again",
     ko: "모델 다시 추천해줘 — 이제 UI 작업에서 버그 디버그로 바꿨어",
     en: "Recommend a model again — we switched from UI work to bug debugging",
     tags: ["bug"],
     expected_primary: "GPT-5 Codex",
-    note: "Context changed → call recommend_model again; expect stick_action switch if current_model was UI/Fable.",
+    note: "Context changed → recommend again; stick_action switch if current was UI/Sonnet.",
   },
   {
     category: "recommend_again",
     ko: "같은 대시보드 레이아웃 작업 이어서 — 모델 또 물어볼 필요 있어?",
     en: "Continuing the same dashboard layout work — do I need to ask for a model again?",
     tags: ["ui"],
-    expected_primary: "Fable 5",
-    note: "Same context → sticky keep; do not re-ask the user. Optionally pass current_model.",
+    expected_primary: "Claude Sonnet",
+    note: "Same context → sticky keep; do not re-ask. Agents: don’t paste full MCP dumps.",
   },
 ];
 

@@ -4,7 +4,7 @@
  * Claude / OpenAI maps are **approximate** — edit HOST_PROFILES in this file
  * (or fork) to match your account’s available model ids.
  *
- * Cursor includes Claude Sonnet/Opus Task slugs as first-class cheaper fallbacks
+ * Cursor catalog SSOT: recommend.CURSOR_AGENT_CATALOG / CURSOR_TASK_SLUG
  * (UI chat dropdown still does not auto-switch).
  *
  * Avoids runtime import of recommend.js (type-only) to prevent circular deps.
@@ -44,7 +44,8 @@ const CURSOR_IDS: Record<ModelId, string> = {
   "Claude Opus": "claude-opus-4-8-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
   "Grok 5.x": "cursor-grok-4.5-high-fast",
-  "GPT-5 Codex": "gpt-5.6-sol-medium",
+  "GPT-5 Sol": "gpt-5.6-sol-medium",
+  "GPT-5 Codex": "gpt-5.6-terra-medium",
 };
 
 export const HOST_PROFILES: Record<HostId, HostProfile> = {
@@ -52,7 +53,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
     id: "cursor",
     display_name: "Cursor",
     note:
-      "ChronoCode Task `model` slugs including Claude Sonnet/Opus cheaper fallbacks. Chat UI picker still manual — agents set Task model=primary_slug or cheaper_fallback_slug.",
+      "Only recommend CURSOR_AGENT_CATALOG slugs. Claude: Sonnet<Opus<Fable · GPT: Sol<Terra. Task model=primary_slug or cheaper_fallback_slug; unavailable → fallback_chain.",
     ids: { ...CURSOR_IDS },
   },
   claude: {
@@ -65,6 +66,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Claude Opus": "claude-opus-4-20250514",
       "Fable 5": "claude-sonnet-4-5-20250929",
       "Grok 5.x": "claude-sonnet-4-5-20250929",
+      "GPT-5 Sol": "claude-sonnet-4-5-20250929",
       "GPT-5 Codex": "claude-opus-4-20250514",
     },
   },
@@ -78,6 +80,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Claude Opus": "o4-mini",
       "Fable 5": "gpt-4.1",
       "Grok 5.x": "o4-mini",
+      "GPT-5 Sol": "gpt-4.1",
       "GPT-5 Codex": "o3",
     },
   },
@@ -91,6 +94,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Claude Opus": "role:opus",
       "Fable 5": "role:mid",
       "Grok 5.x": "role:design",
+      "GPT-5 Sol": "role:sol",
       "GPT-5 Codex": "role:heavy",
     },
   },
@@ -102,7 +106,7 @@ export function listHostProfiles(): Array<{
   note: string;
   aliases: string[];
   ids: Record<ModelId, string>;
-  claude_ladder?: string;
+  ladders?: string;
 }> {
   const aliasByHost = new Map<HostId, string[]>();
   for (const [alias, id] of Object.entries(HOST_ALIASES)) {
@@ -118,8 +122,8 @@ export function listHostProfiles(): Array<{
     ids: HOST_PROFILES[id].ids,
     ...(id === "cursor"
       ? {
-          claude_ladder:
-            "Composer < Sonnet < Opus < Fable/Codex (Task model slug fallback; UI dropdown does not auto-switch)",
+          ladders:
+            "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (catalog-only)",
         }
       : {}),
   }));

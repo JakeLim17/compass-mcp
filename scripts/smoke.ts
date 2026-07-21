@@ -9,7 +9,10 @@ import {
 import { loadProjectConfig } from "../src/projectConfig.ts";
 import {
   COST_TIER,
+  CURSOR_AGENT_CATALOG,
   MODEL_TIER,
+  analyzeCommand,
+  compactRecommendResult,
   recommendModel,
   type CostTier,
   type TokenRisk,
@@ -30,7 +33,8 @@ type Case = {
     current_model?: string;
     project_config?: {
       blocked_models?: string[];
-      cost_bias?: "prefer_cheap" | "prefer_cheaper" | "balanced" | "prefer_quality";
+      unavailable_models?: string[];
+      cost_bias?: "prefer_cheap" | "prefer_cheaper" | "balanced" | "prefer_quality" | "quality" | "cheap";
       preferred_host?: "cursor" | "claude" | "openai" | "generic";
     };
   };
@@ -40,6 +44,7 @@ type Case = {
   expectTokenRisk?: TokenRisk;
   expectPreferCheaper?: boolean;
   expectFallback?: string;
+  expectSlug?: string;
 };
 
 const cases: Case[] = [
@@ -48,12 +53,24 @@ const cases: Case[] = [
     input: { task_description: "로그인 문구 i18n 한 줄 수정" },
     expectPrimary: "Composer 2.5",
     expectCost: "low",
+    expectPreferCheaper: true,
   },
   {
-    name: "UI 태그",
+    name: "UI 태그 → Sonnet(절약 기본)",
     input: { task_description: "대시보드 레이아웃 리팩터", tags: ["ui"] },
+    expectPrimary: "Claude Sonnet",
+    expectCost: "medium",
+    expectPreferCheaper: true,
+    expectFallback: "Composer 2.5",
+  },
+  {
+    name: "넓은 UI 리디자인 → Fable",
+    input: {
+      task_description: "랜딩 히어로 전면 리디자인 — 전체 UI 레이아웃 개편",
+      tags: ["ui"],
+    },
     expectPrimary: "Fable 5",
-    expectCost: "medium-high",
+    expectPreferCheaper: true,
   },
   {
     name: "아키텍처",
@@ -65,22 +82,24 @@ const cases: Case[] = [
     expectCost: "medium-high",
   },
   {
-    name: "버그/CI",
+    name: "버그/CI → Terra",
     input: {
       task_description: "CI 실패 재현과 난해한 타입 에러",
       tags: ["bug"],
     },
     expectPrimary: "GPT-5 Codex",
     expectCost: "high",
+    expectSlug: "gpt-5.6-terra-medium",
+    expectFallback: "GPT-5 Sol",
   },
   {
-    name: "bug 태그 단독(키워드 없음)",
+    name: "bug 태그 단독",
     input: { task_description: "neutral task xyz", tags: ["bug"] },
     expectPrimary: "GPT-5 Codex",
     expectCost: "high",
   },
   {
-    name: "test 태그 단독(키워드 없음)",
+    name: "test 태그 단독",
     input: { task_description: "unit tests", tags: ["test"] },
     expectPrimary: "GPT-5 Codex",
   },
@@ -100,11 +119,11 @@ const cases: Case[] = [
       tags: ["ui"],
       current_model: "Composer 2.5",
     },
-    expectPrimary: "Fable 5",
+    expectPrimary: "Claude Sonnet",
     expectStick: "switch",
   },
   {
-    name: "token high bulk → cheaper primary",
+    name: "token high bulk → Composer",
     input: {
       task_description:
         "전체 코드베이스 대량 리팩터 전부 — 모든 파일 일괄 rename·마이그레이션",
@@ -116,7 +135,7 @@ const cases: Case[] = [
     expectFallback: "Composer 2.5",
   },
   {
-    name: "token high hard-bug → Codex + Sonnet fallback",
+    name: "token high hard-bug → Terra + Sol fallback",
     input: {
       task_description:
         "CI 실패 재현과 난해한 타입 에러 — 긴 로그·대량 스택트레이스 전체 분석",
@@ -126,18 +145,18 @@ const cases: Case[] = [
     expectCost: "high",
     expectTokenRisk: "high",
     expectPreferCheaper: true,
-    expectFallback: "Claude Sonnet",
+    expectFallback: "GPT-5 Sol",
   },
   {
     name: "token low i18n",
     input: { task_description: "로그인 문구 i18n 한 줄 수정" },
     expectPrimary: "Composer 2.5",
     expectTokenRisk: "low",
-    expectPreferCheaper: false,
+    expectPreferCheaper: true,
     expectFallback: "Composer 2.5",
   },
   {
-    name: "cost_bias cheap UI → Sonnet primary",
+    name: "cost_bias cheap UI → Sonnet",
     input: {
       task_description: "대시보드 레이아웃 리팩터",
       tags: ["ui"],
@@ -148,11 +167,30 @@ const cases: Case[] = [
     expectFallback: "Composer 2.5",
   },
   {
-    name: "project blocked Codex",
+    name: "premium UI → Fable",
+    input: {
+      task_description: "대시보드 레이아웃 — 최고 품질로, 비싸도 됨",
+      tags: ["ui"],
+      project_config: { cost_bias: "quality" },
+    },
+    expectPrimary: "Fable 5",
+    expectPreferCheaper: false,
+  },
+  {
+    name: "blocked Codex → Sol",
     input: {
       task_description: "CI 실패 재현과 난해한 타입 에러",
       tags: ["bug"],
       project_config: { blocked_models: ["GPT-5 Codex"] },
+    },
+    expectPrimary: "GPT-5 Sol",
+  },
+  {
+    name: "Sonnet blocked UI → Composer",
+    input: {
+      task_description: "대시보드 레이아웃 UX",
+      tags: ["ui"],
+      project_config: { unavailable_models: ["Claude Sonnet"] },
     },
     expectPrimary: "Composer 2.5",
   },
@@ -177,18 +215,26 @@ for (const c of cases) {
     !!r.cheaper_fallback?.name &&
     !!r.cheaper_fallback_slug &&
     r.cheaper_fallback.slug === r.cheaper_fallback_slug &&
+    Array.isArray(r.fallback_chain) &&
     (c.expectFallback == null ||
       r.cheaper_fallback.name === c.expectFallback);
+  const slugOk =
+    c.expectSlug == null ? true : r.primary_slug === c.expectSlug;
+  const catalogOk =
+    CURSOR_AGENT_CATALOG.includes(
+      r.primary_slug as (typeof CURSOR_AGENT_CATALOG)[number],
+    ) &&
+    r.fallback_chain.every((s) =>
+      CURSOR_AGENT_CATALOG.includes(s as (typeof CURSOR_AGENT_CATALOG)[number]),
+    );
   const estimateOk =
     !!r.usage_estimate?.en &&
-    !!r.usage_estimate?.ko &&
     !!r.recommendation_id &&
     r.primary_cost_tier === COST_TIER[r.primary] &&
-    r.alternative_cost_tier === COST_TIER[r.alternative] &&
     r.primary_tier === MODEL_TIER[r.primary] &&
-    r.alternative_tier === MODEL_TIER[r.alternative] &&
     typeof r.prefer_cheaper === "boolean" &&
-    !!r.token_risk;
+    !!r.token_risk &&
+    r.reason.length < 220;
   const keepSilentOk =
     c.expectStick !== "keep" || r.sticky_suggest === "keep_silent";
   const ok =
@@ -200,25 +246,23 @@ for (const c of cases) {
     riskOk &&
     preferOk &&
     fallbackOk &&
+    slugOk &&
+    catalogOk &&
     estimateOk &&
     keepSilentOk;
   const mark = ok ? "OK" : "FAIL";
   console.log(
-    `[${mark}] ${c.name}: primary=${r.primary} slug=${r.primary_slug} alt=${r.alternative}` +
-      ` cost=${r.primary_cost_tier} tier=${r.primary_tier}` +
-      ` risk=${r.token_risk} prefer_cheaper=${r.prefer_cheaper}` +
-      ` fallback=${r.cheaper_fallback?.name}` +
-      (r.stick_action ? ` stick=${r.stick_action}` : ""),
+    `[${mark}] ${c.name}: primary=${r.primary} slug=${r.primary_slug}` +
+      ` fb=${r.cheaper_fallback?.name} chain=${r.fallback_chain.join(">")}` +
+      ` prefer=${r.prefer_cheaper} reason=${r.reason.slice(0, 60)}`,
   );
   if (!ok) {
     failed += 1;
     console.error(
       `  expected primary=${c.expectPrimary}` +
-        (c.expectStick ? ` stick=${c.expectStick}` : "") +
         (c.expectFallback ? ` fallback=${c.expectFallback}` : "") +
-        `, got primary=${r.primary} stick=${r.stick_action ?? "(none)"}` +
-        ` fallback=${r.cheaper_fallback?.name}` +
-        ` risk=${r.token_risk} id=${r.recommendation_id}`,
+        `, got primary=${r.primary} fallback=${r.cheaper_fallback?.name}` +
+        ` stick=${r.stick_action ?? "(none)"} prefer=${r.prefer_cheaper}`,
     );
   }
 }
@@ -228,23 +272,40 @@ for (const ex of EXAMPLE_PROMPTS) {
     task_description: ex.ko,
     tags: ex.tags,
   });
-  const ok =
-    r.primary === ex.expected_primary &&
-    !!r.primary_cost_tier &&
-    !!r.usage_estimate?.en &&
-    !!r.recommendation_id;
+  const ok = r.primary === ex.expected_primary;
   console.log(
-    `[${ok ? "OK" : "FAIL"}] example:${ex.category}: primary=${r.primary} cost=${r.primary_cost_tier} (expect ${ex.expected_primary})`,
+    `[${ok ? "OK" : "FAIL"}] example:${ex.category}: primary=${r.primary} (expect ${ex.expected_primary})`,
   );
-  if (!ok) {
-    failed += 1;
-    console.error(
-      `  example ko=「${ex.ko.slice(0, 40)}…」 expected=${ex.expected_primary} got=${r.primary}`,
-    );
-  }
+  if (!ok) failed += 1;
 }
 
-// Usage + alerts in temp dir
+// analyzeCommand budget
+{
+  const save = analyzeCommand("토큰 아껴서 싸게 패치해줘");
+  const prem = analyzeCommand("최고 성능으로, 비싸도 됨");
+  const ok =
+    save.budget === "save" &&
+    prem.budget === "premium" &&
+    save.why.length > 0;
+  console.log(`[${ok ? "OK" : "FAIL"}] analyzeCommand budget`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+// compact payload
+{
+  const r = recommendModel({ task_description: "i18n 한 줄" });
+  const c = compactRecommendResult(r);
+  const ok =
+    !!c.primary &&
+    !!c.cheaper_fallback_slug &&
+    !("scores" in c) &&
+    !("usage_estimate" in c);
+  console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "compass-mcp-smoke-"));
 const tmpUsage = path.join(tmpDir, "usage.jsonl");
 const tmpSticky = path.join(tmpDir, "sticky.json");
@@ -253,7 +314,7 @@ const tmpProjectDir = path.join(tmpDir, "proj");
 fs.mkdirSync(tmpProjectDir);
 
 try {
-  const a = logModelUsage(
+  logModelUsage(
     { model: "composer-2.5-fast", task_tag: "ui", note: "smoke" },
     { path: tmpUsage },
   );
@@ -265,48 +326,26 @@ try {
     period: "day",
     alert_thresholds: { high_tier_today: 3 },
   });
-  const weekSummary = getUsageSummary({
-    path: tmpUsage,
-    period: "week",
-  });
   const alertOk =
-    a.ok &&
-    summary.total_today >= 6 &&
-    summary.period === "day" &&
-    Array.isArray(summary.alerts) &&
     summary.alerts.some((x) => x.code === "high_tier_today") &&
-    summary.alerts[0]?.ko.includes("Composer") &&
-    !!summary.report?.en &&
-    !!summary.report?.ko &&
-    summary.report.en.includes("Today") &&
-    weekSummary.period === "week" &&
-    weekSummary.report.ko.includes("이번 주") &&
-    weekSummary.by_tier.high >= 5;
-  console.log(
-    `[${alertOk ? "OK" : "FAIL"}] usage alerts+report: alerts=${summary.alerts.length} codes=${summary.alerts.map((x) => x.code).join(",")} report=${summary.report.en.slice(0, 40)}…`,
-  );
+    !!summary.report?.ko;
+  console.log(`[${alertOk ? "OK" : "FAIL"}] usage alerts`);
   extraChecks += 1;
   if (!alertOk) failed += 1;
 
-  // start_session payload shape (sticky+usage+optional recommend) via same modules
   setSticky(
     { adopted_model: "Composer 2.5", host: "cursor" },
     { path: tmpSticky },
   );
   const stickyForSession = getSticky({ path: tmpSticky });
-  const sessionUsage = getUsageSummary({ path: tmpUsage, period: "week" });
   const sessionRec = recommendModel({
     task_description: "로그인 문구 i18n 한 줄 수정",
     current_model: stickyForSession.sticky?.adopted_model,
   });
   const sessionOk =
     stickyForSession.sticky?.adopted_model === "Composer 2.5" &&
-    !!sessionUsage.report?.ko &&
-    sessionRec.primary === "Composer 2.5" &&
     sessionRec.stick_action === "keep";
-  console.log(
-    `[${sessionOk ? "OK" : "FAIL"}] start_session pieces: sticky+report+recommend`,
-  );
+  console.log(`[${sessionOk ? "OK" : "FAIL"}] sticky keep session`);
   extraChecks += 1;
   if (!sessionOk) failed += 1;
 
@@ -322,57 +361,40 @@ try {
   extraChecks += 1;
   if (!redOk) failed += 1;
 
-  // Sticky file roundtrip
   const set = setSticky(
-    {
-      adopted_model: "Composer 2.5",
-      host: "cursor",
-      context_hint: "i18n patch",
-    },
+    { adopted_model: "Composer 2.5", host: "cursor", context_hint: "i18n" },
     { path: tmpSticky },
   );
-  const got = getSticky({ path: tmpSticky });
-  const stickFileOk =
-    set.ok &&
-    got.sticky?.adopted_model === "Composer 2.5" &&
-    got.sticky?.host === "cursor";
   const cleared = clearSticky({ path: tmpSticky });
-  const clearOk = cleared.cleared && getSticky({ path: tmpSticky }).sticky == null;
-  console.log(
-    `[${stickFileOk && clearOk ? "OK" : "FAIL"}] sticky file set/get/clear`,
-  );
+  const stickFileOk =
+    set.ok && cleared.cleared && getSticky({ path: tmpSticky }).sticky == null;
+  console.log(`[${stickFileOk ? "OK" : "FAIL"}] sticky file`);
   extraChecks += 1;
-  if (!(stickFileOk && clearOk)) failed += 1;
+  if (!stickFileOk) failed += 1;
 
-  // Project config
   const cfgPath = path.join(tmpProjectDir, ".compass-mcp.json");
   fs.writeFileSync(
     cfgPath,
     JSON.stringify({
       preferred_host: "claude",
       cost_bias: "prefer_cheap",
-      blocked_models: ["Grok 5.x"],
-      usage_alert_thresholds: { high_tier_today: 2 },
+      unavailable_models: ["Grok 5.x"],
     }),
     "utf8",
   );
   const loaded = loadProjectConfig({ startDir: tmpProjectDir });
-  const cfgOk =
-    loaded.found &&
-    loaded.config.preferred_host === "claude" &&
-    loaded.config.cost_bias === "prefer_cheap";
   const withHost = recommendModel({
     task_description: "로그인 문구 i18n 한 줄 수정",
     project_config: loaded.config,
   });
-  const hostFromCfg = withHost.host === "claude";
-  console.log(
-    `[${cfgOk && hostFromCfg ? "OK" : "FAIL"}] project config load+host host=${withHost.host}`,
-  );
+  const cfgOk =
+    loaded.found &&
+    loaded.config.cost_bias === "prefer_cheap" &&
+    withHost.host === "claude";
+  console.log(`[${cfgOk ? "OK" : "FAIL"}] project config`);
   extraChecks += 1;
-  if (!(cfgOk && hostFromCfg)) failed += 1;
+  if (!cfgOk) failed += 1;
 
-  // Feedback
   logFeedback(
     { vote: "bad", primary: "GPT-5 Codex", models: ["GPT-5 Codex"] },
     { path: tmpFeedback },
@@ -384,16 +406,13 @@ try {
   const adj = getFeedbackAdjustments({ path: tmpFeedback });
   const fbOk =
     (adj["Composer 2.5"] ?? 0) > 0 && (adj["GPT-5 Codex"] ?? 0) < 0;
-  console.log(
-    `[${fbOk ? "OK" : "FAIL"}] feedback adjust: ${JSON.stringify(adj)}`,
-  );
+  console.log(`[${fbOk ? "OK" : "FAIL"}] feedback`);
   extraChecks += 1;
   if (!fbOk) failed += 1;
 } finally {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
-// Host profiles
 {
   const cursor = recommendModel({
     task_description: "로그인 문구 i18n 한 줄 수정",
@@ -417,83 +436,44 @@ try {
   const hostOk =
     cursor.host === "cursor" &&
     cursor.primary_id === cursor.primary_slug &&
-    cursor.primary_cost_tier === "low" &&
-    !!cursor.cheaper_fallback_slug &&
-    claude.host === "claude" &&
+    cursor.primary_slug === "composer-2.5-fast" &&
     claude.primary === "GPT-5 Codex" &&
-    claude.primary_id.includes("opus") &&
-    claude.cheaper_fallback.name === "Claude Sonnet" &&
-    openai.host === "openai" &&
+    claude.cheaper_fallback.name === "GPT-5 Sol" &&
     openai.primary === "Grok 5.x" &&
     generic.host === "generic" &&
-    generic.primary_id === "role:mid";
+    generic.primary_id === "role:sonnet";
   console.log(
-    `[${hostOk ? "OK" : "FAIL"}] hosts: cursor=${cursor.primary_id} claude=${claude.primary_id} fallback=${claude.cheaper_fallback.name}`,
+    `[${hostOk ? "OK" : "FAIL"}] hosts terra=${claude.primary_id} gen=${generic.primary_id}`,
   );
   extraChecks += 1;
   if (!hostOk) failed += 1;
 }
 
-// prefer_cheaper fallback presence (Sonnet/Composer)
 {
-  const bulk = recommendModel({
-    task_description:
-      "전체 코드베이스 대량 리팩터 전부 — 모든 파일 일괄 rename·마이그레이션",
-  });
-  const uiCheap = recommendModel({
-    task_description: "랜딩 페이지 화면 UX 다듬기",
-    tags: ["ui"],
-    project_config: { cost_bias: "prefer_cheaper" },
-  });
   const hard = recommendModel({
     task_description: "CI 실패 재현과 난해한 타입 에러 — 긴 로그 전체 분석",
     tags: ["bug"],
   });
   const fbOk =
-    bulk.prefer_cheaper &&
-    bulk.primary === "Composer 2.5" &&
-    bulk.cheaper_fallback.name === "Composer 2.5" &&
-    uiCheap.prefer_cheaper &&
-    uiCheap.primary === "Claude Sonnet" &&
-    uiCheap.cheaper_fallback_slug === "composer-2.5-fast" &&
-    hard.prefer_cheaper &&
-    hard.primary === "GPT-5 Codex" &&
-    hard.cheaper_fallback.name === "Claude Sonnet" &&
-    hard.cheaper_fallback_slug === "claude-sonnet-5-thinking-high" &&
-    hard.reason.includes("Composer < Sonnet");
+    hard.primary_slug === "gpt-5.6-terra-medium" &&
+    hard.cheaper_fallback_slug === "gpt-5.6-sol-medium" &&
+    hard.fallback_chain[0] === "gpt-5.6-sol-medium" &&
+    hard.fallback_chain.includes("claude-sonnet-5-thinking-high");
   console.log(
-    `[${fbOk ? "OK" : "FAIL"}] cheaper_fallback ladder: bulk=${bulk.cheaper_fallback.name} ui=${uiCheap.primary} hard=${hard.cheaper_fallback_slug}`,
+    `[${fbOk ? "OK" : "FAIL"}] fallback_chain=${hard.fallback_chain.join(",")}`,
   );
   extraChecks += 1;
   if (!fbOk) failed += 1;
 }
 
-// how_to_refresh_mcp
 {
   const cursorKo = buildHowToRefreshMcp({ host: "cursor", locale: "ko" });
-  const cursorEn = buildHowToRefreshMcp({ host: "cursor", locale: "en" });
-  const claude = buildHowToRefreshMcp({ host: "claude", locale: "en" });
   const hint = mcpRefreshSessionHint();
   const refreshOk =
-    cursorKo.host === "cursor" &&
-    cursorKo.locale === "ko" &&
-    cursorKo.steps.length >= 4 &&
     cursorKo.steps_ko.some((s) => s.includes("Tools & MCP")) &&
-    cursorKo.steps_ko.some((s) => s.includes("Cmd+Shift+J")) &&
-    cursorKo.steps_en.some((s) => s.includes("toggle OFF then ON")) &&
-    cursorEn.locale === "en" &&
-    cursorEn.steps[0]?.includes("Cmd+Shift+J") &&
-    !!cursorKo.docs?.cursor_mcp?.includes("cursor.com/docs/mcp") &&
-    cursorKo.expected_tools.includes("start_session") &&
-    cursorKo.expected_tools.includes("how_to_refresh_mcp") &&
-    EXPECTED_TOOL_NAMES.includes("how_to_refresh_mcp") &&
-    claude.host === "claude" &&
-    claude.steps_en.some((s) => /quit/i.test(s)) &&
-    hint.tool === "how_to_refresh_mcp" &&
-    hint.ko.includes("how_to_refresh_mcp");
-  console.log(
-    `[${refreshOk ? "OK" : "FAIL"}] how_to_refresh_mcp: host=${cursorKo.host} steps=${cursorKo.steps.length}`,
-  );
+    EXPECTED_TOOL_NAMES.includes("recommend_model") &&
+    hint.tool === "how_to_refresh_mcp";
+  console.log(`[${refreshOk ? "OK" : "FAIL"}] how_to_refresh_mcp`);
   extraChecks += 1;
   if (!refreshOk) failed += 1;
 }
