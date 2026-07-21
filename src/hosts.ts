@@ -13,7 +13,7 @@ import type { ModelId } from "./recommend.js";
 
 export type HostId = "cursor" | "claude" | "openai" | "generic";
 
-/** Aliases fold into a real HostId (forge/openclaw → generic) */
+/** Aliases fold into a real HostId (vscode/forge/openclaw → generic) */
 const HOST_ALIASES: Record<string, HostId> = {
   cursor: "cursor",
   claude: "claude",
@@ -22,9 +22,13 @@ const HOST_ALIASES: Record<string, HostId> = {
   openai: "openai",
   chatgpt: "openai",
   gpt: "openai",
+  codex: "openai",
   generic: "generic",
   forge: "generic",
   openclaw: "generic",
+  vscode: "generic",
+  "vs-code": "generic",
+  "visual-studio-code": "generic",
   other: "generic",
 };
 
@@ -53,7 +57,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
     id: "cursor",
     display_name: "Cursor",
     note:
-      "Only recommend CURSOR_AGENT_CATALOG slugs. Claude: Sonnet<Opus<Fable (design/plan) · GPT: Sol<Terra. Task model=primary_slug or cheaper_fallback_slug; unavailable → fallback_chain.",
+      "Catalog slugs only. Task-fit primary + candidates fallback_chain — if primary_id unavailable, try candidates[1].id (same on all hosts).",
     ids: { ...CURSOR_IDS },
   },
   claude: {
@@ -86,8 +90,9 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
   },
   generic: {
     id: "generic",
-    display_name: "Generic MCP host (Forge / OpenClaw / other)",
-    note: "Role placeholders only — fill real ids in HOST_PROFILES.generic.ids for your host.",
+    display_name: "Generic MCP host (VS Code / Forge / OpenClaw / other)",
+    note:
+      "Role placeholders — edit ids for your host. VS Code MCP: use host=vscode or generic. Empty/unavailable ids are skipped in candidates.",
     ids: {
       "Composer 2.5": "role:light",
       "Claude Sonnet": "role:sonnet",
@@ -100,6 +105,15 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
   },
 };
 
+/** Host-specific id is usable (non-empty, not marked unavailable) */
+export function isHostIdAvailable(id: string | null | undefined): boolean {
+  if (!id?.trim()) return false;
+  const lower = id.trim().toLowerCase();
+  return (
+    !lower.startsWith("unavailable") && lower !== "none" && lower !== "n/a"
+  );
+}
+
 export function listHostProfiles(): Array<{
   id: HostId;
   display_name: string;
@@ -107,6 +121,9 @@ export function listHostProfiles(): Array<{
   aliases: string[];
   ids: Record<ModelId, string>;
   ladders?: string;
+  /** Roles with empty or unavailable ids — agents should fallback */
+  unavailable_roles?: ModelId[];
+  fallback_note?: string;
 }> {
   const aliasByHost = new Map<HostId, string[]>();
   for (const [alias, id] of Object.entries(HOST_ALIASES)) {
@@ -114,19 +131,29 @@ export function listHostProfiles(): Array<{
     if (alias !== id) list.push(alias);
     aliasByHost.set(id, list);
   }
-  return (Object.keys(HOST_PROFILES) as HostId[]).map((id) => ({
-    id,
-    display_name: HOST_PROFILES[id].display_name,
-    note: HOST_PROFILES[id].note,
-    aliases: aliasByHost.get(id) ?? [],
-    ids: HOST_PROFILES[id].ids,
-    ...(id === "cursor"
-      ? {
-          ladders:
-            "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (catalog-only)",
-        }
-      : {}),
-  }));
+  return (Object.keys(HOST_PROFILES) as HostId[]).map((id) => {
+    const profile = HOST_PROFILES[id];
+    const unavailable_roles = (Object.entries(profile.ids) as [ModelId, string][])
+      .filter(([, roleId]) => !isHostIdAvailable(roleId))
+      .map(([model]) => model);
+    return {
+      id,
+      display_name: profile.display_name,
+      note: profile.note,
+      aliases: aliasByHost.get(id) ?? [],
+      ids: profile.ids,
+      unavailable_roles:
+        unavailable_roles.length > 0 ? unavailable_roles : undefined,
+      fallback_note:
+        "Same recommend_model scoring on every host. If primary_id missing/unavailable → use candidates[1].id, then next.",
+      ...(id === "cursor"
+        ? {
+            ladders:
+              "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (catalog-only)",
+          }
+        : {}),
+    };
+  });
 }
 
 /** Resolve host from arg or COMPASS_MCP_HOST env (legacy MODEL_ROUTER_HOST); default cursor */

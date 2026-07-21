@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * compass-mcp — ChronoCode model recommendation MCP (stdio).
- * Purpose: task-fit model selection — light patch→cheap, design→Claude, hard bug→Codex.
+ * Purpose: task-fit model selection — light patch→Composer, design competes, hard bug→Codex.
  * Default responses are compact (verbose=false).
  */
 import { z } from "zod";
@@ -27,7 +27,7 @@ import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.6.0";
+const SERVER_VERSION = "0.6.1";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -41,7 +41,7 @@ const categorySchema = z.enum([
   "recommend_again",
 ]);
 const hostSchema = z
-  .enum(["cursor", "claude", "openai", "generic", "forge", "openclaw"])
+  .enum(["cursor", "claude", "openai", "generic", "vscode", "forge", "openclaw"])
   .optional();
 const voteSchema = z.enum(["good", "bad"]);
 const periodSchema = z.enum(["day", "week"]);
@@ -278,7 +278,7 @@ server.tool(
         scores: result.scores,
         sticky_loaded: stickyRes.sticky?.adopted_model ?? null,
         usage_alerts: usage.alerts.map((a) => a.code),
-        note: "Task-fit routing: light→Composer, design→Fable, hard bug→Codex. Task model=cheaper_fallback_slug when prefer_cheaper; unavailable→fallback_chain.",
+        note: "Task-fit routing: primary + candidates fallback_chain. If primary_id unavailable on host → candidates[1].id. Design: Fable/Grok/Opus/Sonnet compete.",
       },
       true,
     );
@@ -387,6 +387,7 @@ server.tool(
         meta: {
           reading: EXAMPLE_PROMPTS_META.reading_recommendation,
           model_persistence: EXAMPLE_PROMPTS_META.model_persistence,
+          design_primary_varies: EXAMPLE_PROMPTS_META.design_primary_varies,
         },
         prompts: list.map((e) => ({
           category: e.category,
@@ -407,10 +408,16 @@ server.tool(
   async ({ verbose }) => {
     const hosts = listHostProfiles();
     if (!verbose) {
-      const cursor = hosts.find((h) => h.id === "cursor");
       return jsonToolResult({
-        cursor_ids: cursor?.ids,
-        ladders: cursor?.ladders,
+        philosophy:
+          "Task-fit primary on every host — if unavailable, use candidates[1].id (not Cursor-only).",
+        hosts: hosts.map((h) => ({
+          id: h.id,
+          aliases: h.aliases,
+          unavailable_roles: h.unavailable_roles ?? [],
+          fallback_note: h.fallback_note,
+        })),
+        cursor_ladders: hosts.find((h) => h.id === "cursor")?.ladders,
       });
     }
     return jsonToolResult({ hosts }, true);

@@ -19,8 +19,10 @@ export interface ExamplePrompt {
   en: string;
   /** Suggested tags for recommend_model */
   tags?: Tag[];
-  /** Expected primary after scoring (hint for agents / docs) */
+  /** Expected primary after scoring (hint — design may vary by scope) */
   expected_primary: ModelId;
+  /** When primary varies by heuristics (e.g. design/planning) */
+  expected_primaries?: ModelId[];
   /** Optional note for this example */
   note?: string;
 }
@@ -57,13 +59,15 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     tags: ["bug"],
     expected_primary: "GPT-5 Codex",
   },
-  // —— architecture → Claude Fable (design/plan) ——
+  // —— architecture → Fable/Grok/Opus/Sonnet compete (not Claude-only) ——
   {
     category: "architecture",
     ko: "결제 모듈 구조 설계랑 기술 선택 트레이드오프 정리해줘",
     en: "Design the payment module structure and summarize tech-choice trade-offs",
     tags: ["architecture"],
     expected_primary: "Fable 5",
+    expected_primaries: ["Fable 5", "Grok 5.x", "Claude Opus"],
+    note: "Broad tradeoffs — Fable/Grok/Opus often win; not vendor-locked.",
   },
   {
     category: "architecture",
@@ -71,6 +75,16 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "First decide the architecture for how we should build this feature",
     tags: ["architecture"],
     expected_primary: "Fable 5",
+    expected_primaries: ["Fable 5", "Grok 5.x", "Claude Opus", "Claude Sonnet"],
+  },
+  {
+    category: "architecture",
+    ko: "간단 계획만 — 다음 스프린트 뭐 할지 짧게 정리",
+    en: "Light plan only — briefly outline what to do next sprint",
+    tags: ["architecture"],
+    expected_primary: "Claude Sonnet",
+    expected_primaries: ["Claude Sonnet", "Composer 2.5", "Fable 5"],
+    note: "Light planning → Sonnet/Composer may beat Fable.",
   },
   // —— light patch / i18n → Composer 2.5 ——
   {
@@ -108,7 +122,9 @@ export const EXAMPLE_PROMPTS_META = {
   model_persistence:
     "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Default avoids overspending — light patch→Composer, design→Fable, hard bug→Codex. quality/premium wording may escalate UI to Fable. Document both honestly.",
+    "Default avoids overspend — light patch→Composer, design competes (Fable/Grok/Opus/Sonnet), hard bug→Codex. quality/premium may escalate UI/design. Document both honestly.",
+  design_primary_varies:
+    "Design/planning primary is NOT fixed to Claude/Fable — scope & keywords pick among Fable, Grok, Opus, Sonnet. unavailable on host → candidates[1].",
   reading_recommendation:
     "primary / for_task = task recommendation only. The agent or Task worker that called this MCP (e.g. Composer) may differ — check clarity.ko in recommend_model.",
   honest_limit:

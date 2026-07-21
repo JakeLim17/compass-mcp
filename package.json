@@ -1,9 +1,9 @@
 {
   "name": "compass-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "license": "MIT",
-  "description": "Compass MCP — task-fit model routing for Cursor (design→Claude, patch→Composer, bug→Codex)",
+  "description": "Compass MCP — task-fit model routing with fallback chain (design competes, not Claude-only)",
   "type": "module",
   "bin": {
     "compass-mcp": "./dist/server.js"

@@ -235,7 +235,12 @@ for (const c of cases) {
     !!r.cheaper_fallback?.name &&
     !!r.cheaper_fallback_slug &&
     r.cheaper_fallback.slug === r.cheaper_fallback_slug &&
+    Array.isArray(r.candidates) &&
+    r.candidates.length >= 2 &&
+    r.candidates[0]?.name === r.primary &&
+    r.candidates[0]?.id === r.primary_id &&
     Array.isArray(r.fallback_chain) &&
+    r.fallback_chain.length >= 2 &&
     (c.expectFallback == null ||
       r.cheaper_fallback.name === c.expectFallback);
   const slugOk =
@@ -292,10 +297,33 @@ for (const ex of EXAMPLE_PROMPTS) {
     task_description: ex.ko,
     tags: ex.tags,
   });
-  const ok = r.primary === ex.expected_primary;
+  const allowed = ex.expected_primaries ?? [ex.expected_primary];
+  const ok = allowed.includes(r.primary);
   console.log(
-    `[${ok ? "OK" : "FAIL"}] example:${ex.category}: primary=${r.primary} (expect ${ex.expected_primary})`,
+    `[${ok ? "OK" : "FAIL"}] example:${ex.category}: primary=${r.primary} (expect one of ${allowed.join("|")})`,
   );
+  if (!ok) failed += 1;
+}
+
+// design primary is not always Fable
+{
+  const designPrompts = [
+    "결제 모듈 구조 설계와 기술 선택 트레이드오프",
+    "간단 계획만 — 다음 스프린트 뭐 할지 짧게 정리",
+    "UI 설계 와이어프레임 — 대시보드 화면 구조만",
+    "최고 품질로 시스템 아키텍처 트레이드오프 정리",
+  ];
+  const primaries = designPrompts.map(
+    (task_description) =>
+      recommendModel({ task_description, tags: ["architecture"] }).primary,
+  );
+  const allFable = primaries.every((p) => p === "Fable 5");
+  const hasSonnet = primaries.some((p) => p === "Claude Sonnet");
+  const ok = !allFable && primaries.length >= 2;
+  console.log(
+    `[${ok ? "OK" : "FAIL"}] architecture primary varies: ${primaries.join(",")} (allFable=${allFable} sonnet=${hasSonnet})`,
+  );
+  extraChecks += 1;
   if (!ok) failed += 1;
 }
 
@@ -331,6 +359,10 @@ for (const ex of EXAMPLE_PROMPTS) {
   const ok =
     !!c.primary &&
     !!c.cheaper_fallback_slug &&
+    Array.isArray(c.candidates) &&
+    (c.candidates as unknown[]).length >= 2 &&
+    Array.isArray(c.fallback_chain) &&
+    (c.fallback_chain as unknown[]).length >= 2 &&
     forTask?.primary === r.primary &&
     forTask?.primary_id === r.primary_id &&
     forTask?.cost_tier === r.primary_cost_tier &&
@@ -501,17 +533,26 @@ try {
     tags: ["ui"],
     host: "forge",
   });
+  const vscode = recommendModel({
+    task_description: "결제 모듈 구조 설계",
+    tags: ["architecture"],
+    host: "vscode",
+  });
   const hostOk =
     cursor.host === "cursor" &&
     cursor.primary_id === cursor.primary_slug &&
     cursor.primary_slug === "composer-2.5-fast" &&
+    cursor.candidates.length >= 2 &&
     claude.primary === "GPT-5 Codex" &&
     claude.cheaper_fallback.name === "GPT-5 Sol" &&
+    claude.candidates.length >= 2 &&
     openai.primary === "Fable 5" &&
     generic.host === "generic" &&
-    generic.primary_id === "role:sonnet";
+    generic.primary_id === "role:sonnet" &&
+    vscode.host === "generic" &&
+    vscode.candidates.length >= 2;
   console.log(
-    `[${hostOk ? "OK" : "FAIL"}] hosts terra=${claude.primary_id} gen=${generic.primary_id}`,
+    `[${hostOk ? "OK" : "FAIL"}] hosts terra=${claude.primary_id} gen=${generic.primary_id} vscode=${vscode.host}`,
   );
   extraChecks += 1;
   if (!hostOk) failed += 1;
@@ -525,7 +566,10 @@ try {
   const fbOk =
     hard.primary_slug === "gpt-5.6-terra-medium" &&
     hard.cheaper_fallback_slug === "gpt-5.6-sol-medium" &&
-    hard.fallback_chain[0] === "gpt-5.6-sol-medium" &&
+    hard.candidates.length >= 2 &&
+    hard.candidates[0]?.name === "GPT-5 Codex" &&
+    hard.fallback_chain[0] === hard.primary_slug &&
+    hard.fallback_chain.includes("gpt-5.6-sol-medium") &&
     hard.fallback_chain.includes("claude-sonnet-5-thinking-high");
   console.log(
     `[${fbOk ? "OK" : "FAIL"}] fallback_chain=${hard.fallback_chain.join(",")}`,
