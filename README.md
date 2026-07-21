@@ -21,9 +21,22 @@ cd compass-mcp
 npm run setup    # npm i + prints Cursor / Claude mcp.json snippets
 ```
 
-Paste the printed snippet into `~/.cursor/mcp.json` (or Claude Desktop config), then **Refresh MCP** / restart the host.
+Paste the printed snippet into `~/.cursor/mcp.json` (or Claude Desktop config), then **refresh MCP** (see below) / restart the host.
 
 > Not on npm — clone from GitHub only.
+
+### After update: refresh MCP
+
+New tools (e.g. `start_session`, `how_to_refresh_mcp`) only appear after the host reloads the server.
+
+**Ask the agent:** `how_to_refresh_mcp` with optional `host` (`cursor` | `claude` | `openai` | `vscode` | `generic`) and `locale` (`ko` | `en`, default `ko`).
+
+**Cursor (official docs):** [MCP](https://cursor.com/docs/mcp.md) · [Help: MCP](https://cursor.com/help/customization/mcp.md)
+
+1. Settings: Mac `Cmd+Shift+J` (Win/Linux `Ctrl+Shift+J`) → **Tools & MCP**
+2. Find `compass-mcp` / `user-compass-mcp` → toggle **OFF** then **ON** (or ↻ if shown)
+3. Optional: `Cmd+Shift+P` → search MCP / Tools & MCP (docs have **no** dedicated “MCP: Refresh” command)
+4. Still stale: quit Cursor fully and reopen; then remove + re-add; MCP Logs via `Cmd+Shift+U`
 
 ### Cursor snippet shape
 
@@ -44,7 +57,8 @@ Paste the printed snippet into `~/.cursor/mcp.json` (or Claude Desktop config), 
 
 | Tool | What |
 |------|------|
-| **`start_session`** (`session_check`) | **One call:** sticky + usage alerts + `report` + optional quick recommend |
+| **`start_session`** (`session_check`) | **One call:** sticky + usage alerts + `report` + optional quick recommend; includes `mcp_refresh` hint |
+| **`how_to_refresh_mcp`** | Host steps to reload MCP after install/update (`host`, `locale`) |
 | `recommend_model` | Primary + alt + tiers + `token_risk` + sticky/project/feedback |
 | `get_sticky` / `set_sticky` / `clear_sticky` | Adopted model file |
 | `get_usage_summary` | `period: day\|week` + model/tier counts + **`report`** (en/ko) + `alerts[]` |
@@ -140,4 +154,4 @@ npm run build
 
 ---
 
-**한국어:** 바이브코딩용 로컬 모델 추천 MCP. `git clone` → `npm run setup` → mcp.json → **Refresh**. 작업 시작은 `start_session` 한 번. 주간 리포트는 `get_usage_summary(period=week)`. 프로젝트 루트에 `.compass-mcp.json.example` 복사.
+**한국어:** 바이브코딩용 로컬 모델 추천 MCP. `git clone` → `npm run setup` → mcp.json → **MCP 새로고침**(`how_to_refresh_mcp`). 작업 시작은 `start_session` 한 번. 주간 리포트는 `get_usage_summary(period=week)`. 프로젝트 루트에 `.compass-mcp.json.example` 복사.

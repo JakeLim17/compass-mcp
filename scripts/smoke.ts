@@ -15,6 +15,11 @@ import {
   type TokenRisk,
 } from "../src/recommend.ts";
 import { clearSticky, getSticky, setSticky } from "../src/sticky.ts";
+import {
+  buildHowToRefreshMcp,
+  EXPECTED_TOOL_NAMES,
+  mcpRefreshSessionHint,
+} from "../src/refreshHelp.ts";
 import { getUsageSummary, logModelUsage } from "../src/usage.ts";
 
 type Case = {
@@ -400,6 +405,36 @@ try {
   );
   extraChecks += 1;
   if (!hostOk) failed += 1;
+}
+
+// how_to_refresh_mcp
+{
+  const cursorKo = buildHowToRefreshMcp({ host: "cursor", locale: "ko" });
+  const cursorEn = buildHowToRefreshMcp({ host: "cursor", locale: "en" });
+  const claude = buildHowToRefreshMcp({ host: "claude", locale: "en" });
+  const hint = mcpRefreshSessionHint();
+  const refreshOk =
+    cursorKo.host === "cursor" &&
+    cursorKo.locale === "ko" &&
+    cursorKo.steps.length >= 4 &&
+    cursorKo.steps_ko.some((s) => s.includes("Tools & MCP")) &&
+    cursorKo.steps_ko.some((s) => s.includes("Cmd+Shift+J")) &&
+    cursorKo.steps_en.some((s) => s.includes("toggle OFF then ON")) &&
+    cursorEn.locale === "en" &&
+    cursorEn.steps[0]?.includes("Cmd+Shift+J") &&
+    !!cursorKo.docs?.cursor_mcp?.includes("cursor.com/docs/mcp") &&
+    cursorKo.expected_tools.includes("start_session") &&
+    cursorKo.expected_tools.includes("how_to_refresh_mcp") &&
+    EXPECTED_TOOL_NAMES.includes("how_to_refresh_mcp") &&
+    claude.host === "claude" &&
+    claude.steps_en.some((s) => /quit/i.test(s)) &&
+    hint.tool === "how_to_refresh_mcp" &&
+    hint.ko.includes("how_to_refresh_mcp");
+  console.log(
+    `[${refreshOk ? "OK" : "FAIL"}] how_to_refresh_mcp: host=${cursorKo.host} steps=${cursorKo.steps.length}`,
+  );
+  extraChecks += 1;
+  if (!refreshOk) failed += 1;
 }
 
 const total = cases.length + EXAMPLE_PROMPTS.length + extraChecks;

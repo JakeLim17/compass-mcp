@@ -15,11 +15,18 @@ import {
   PROJECT_CONFIG_SCHEMA_DOC,
 } from "./projectConfig.js";
 import { recommendModel, type Tag } from "./recommend.js";
+import {
+  buildHowToRefreshMcp,
+  mcpRefreshSessionHint,
+} from "./refreshHelp.js";
 import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.3.0";
+const SERVER_VERSION = "0.3.1";
+const refreshHostSchema = z
+  .enum(["cursor", "claude", "openai", "vscode", "generic"])
+  .optional();
 
 const tagSchema = z.enum(["ui", "bug", "architecture", "test"]);
 const categorySchema = z.enum([
@@ -129,9 +136,10 @@ function buildStartSessionPayload(input: {
     },
     project_config_path: project.path,
     recommend,
+    mcp_refresh: mcpRefreshSessionHint(),
     flow_hint:
-      "After pick: log_model_usage → set_sticky. stick_action=keep → keep silent. Alerts: surface once per session.",
-    note: "Prefer start_session at work start. Alias: session_check.",
+      "After pick: log_model_usage → set_sticky. stick_action=keep → keep silent. Alerts: surface once per session. Stale tools → how_to_refresh_mcp.",
+    note: "Prefer start_session at work start. Alias: session_check. After install/update, if tools look stale, call how_to_refresh_mcp.",
     ...(input.alias_of ? { alias_of: input.alias_of } : {}),
   };
 }
@@ -148,8 +156,28 @@ function jsonToolResult(payload: unknown) {
 }
 
 server.tool(
+  "how_to_refresh_mcp",
+  "설치/업데이트 후 MCP 도구 목록이 안 바뀔 때 호스트별 새로고침 절차 (ko/en). Cursor: Tools & MCP 토글. host·locale 선택.",
+  {
+    host: refreshHostSchema.describe(
+      "cursor | claude | openai | vscode | generic (기본 cursor)",
+    ),
+    locale: localeSchema
+      .optional()
+      .describe("ko | en (기본 ko — steps 주 언어; steps_en/steps_ko 둘 다 포함)"),
+  },
+  async ({ host, locale }) =>
+    jsonToolResult(
+      buildHowToRefreshMcp({
+        host,
+        locale: locale ?? "ko",
+      }),
+    ),
+);
+
+server.tool(
   "start_session",
-  "작업 시작 한 번 호출: sticky + usage alerts(+ report) + (선택) task_description 있으면 quick recommend. session_check 별칭.",
+  "작업 시작 한 번 호출: sticky + usage alerts(+ report) + (선택) task_description 있으면 quick recommend. session_check 별칭. 도구 목록이 옛것이면 how_to_refresh_mcp.",
   startSessionArgs,
   async (args) =>
     jsonToolResult(
