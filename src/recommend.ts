@@ -1,7 +1,9 @@
 /**
  * ChronoCode model scoring SSOT.
- * Claude family: Composer (Cursor-cheap) < Sonnet < Opus < Fable
- * GPT/Codex family: Sol (cheaper) < Terra/Codex (heavier)
+ * Goal: task-fit model — not “always cheapest”.
+ * Light patch → Composer · UI/multi-file → mid Claude · design/plan → Claude(Fable)
+ * · hard CI/bug → Codex. Avoid overspending, not under-spending on design.
+ * Claude family: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex
  * Only recommend Cursor catalog slugs for host=cursor.
  */
 import {
@@ -85,7 +87,7 @@ export const CLAUDE_FAMILY_LADDER: ModelId[] = [
 export const GPT_FAMILY_LADDER: ModelId[] = ["GPT-5 Sol", "GPT-5 Codex"];
 
 export const CLAUDE_LADDER_DOC =
-  "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (catalog-only; Grok = design-mid)";
+  "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (design/plan → Fable; Grok alt only)";
 
 export const GPT_LADDER_DOC = "Sol < Terra/Codex";
 
@@ -146,8 +148,8 @@ const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
     ko: "중간 무게 멀티파일·UI 작업 (Cursor 고가 Claude)",
   },
   "Grok 5.x": {
-    en: "heavier design/reasoning — design only, then hand off",
-    ko: "무거운 설계·추론 — 설계만 하고 구현은 넘김",
+    en: "optional alt — Claude(Fable) preferred for design/planning",
+    ko: "보조 대안 — 설계·기획은 Claude(Fable) 우선",
   },
   "GPT-5 Sol": {
     en: "cheaper GPT tier — mid reasoning without Terra burn",
@@ -228,7 +230,7 @@ export function resolveModelId(raw?: string | null): ModelId | null {
     if (lower.includes("sonnet")) return "Claude Sonnet";
     if (lower.includes("opus")) return "Claude Opus";
     if (lower.includes("mid") || lower.includes("ui")) return "Fable 5";
-    if (lower.includes("design")) return "Grok 5.x";
+    if (lower.includes("design")) return "Fable 5";
     if (lower.includes("sol")) return "GPT-5 Sol";
     if (lower.includes("heavy")) return "GPT-5 Codex";
   }
@@ -287,8 +289,10 @@ export interface RecommendResult {
   /** current_model 있을 때: keep = 그대로 / switch = 전환 제안 */
   stick_action?: "keep" | "switch";
   current_resolved?: ModelId | null;
-  /** When keep: soft hint to stay quiet */
+  /** When keep: soft hint to stay quiet (internal) */
   sticky_suggest?: "keep_silent";
+  /** Human-facing keep/switch line — no “sticky” word */
+  model_persistence?: UsageEstimate;
   /** Task recommendation — distinct from the agent that called this MCP */
   for_task: {
     primary: ModelId;
@@ -333,7 +337,12 @@ const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
     "Claude Sonnet": 8,
     "Composer 2.5": 5,
   },
-  architecture: { "Grok 5.x": 45, "Fable 5": 10, "Claude Opus": 5 },
+  architecture: {
+    "Fable 5": 45,
+    "Claude Opus": 18,
+    "Claude Sonnet": 8,
+    "Grok 5.x": 4,
+  },
   test: {
     "GPT-5 Codex": 50,
     "GPT-5 Sol": 45,
@@ -355,8 +364,8 @@ const KEYWORD_RULES: Array<{
     boost: { "Fable 5": 30, "Claude Sonnet": 8, "Composer 2.5": 5 },
   },
   {
-    re: /설계|구조|아키텍처|기술\s*선택|어떻게\s*짤|기획|트레이드.?오프|의사결정/i,
-    boost: { "Grok 5.x": 40, "Fable 5": 8, "Claude Opus": 5 },
+    re: /설계|구조|아키텍처|기술\s*선택|어떻게\s*짤|기획|계획|트레이드.?오프|의사결정/i,
+    boost: { "Fable 5": 40, "Claude Opus": 15, "Claude Sonnet": 6, "Grok 5.x": 3 },
   },
   {
     re: /ci\s*실패|테스트\s*설계|재현|난해|플레?이키|디버그|버그|회귀|타입\s*에러/i,
@@ -409,6 +418,37 @@ const BULK_MECHANICAL_RE =
 
 const UI_TASK_RE =
   /ui|ux|디자인|화면|레이아웃|프론트|css|스타일|컴포넌트|랜딩|히어로/i;
+
+/** Implementation / coding phase — design→build handoff */
+const IMPLEMENTATION_RE =
+  /구현|코딩|만들자|구현해보자|코드\s*작|개발해|implement|build\s*it|write\s*code|coding|만들어\s*줘|코딩해/i;
+
+export function isImplementationTask(text: string): boolean {
+  return IMPLEMENTATION_RE.test(text ?? "");
+}
+
+/** Models typically used for design/planning (hand off when task shifts to build) */
+export function isDesignRoleModel(model: ModelId): boolean {
+  return (
+    model === "Grok 5.x" || model === "Fable 5" || model === "Claude Opus"
+  );
+}
+
+function buildModelPersistenceNote(
+  stick_action: "keep" | "switch",
+  primary: ModelId,
+): UsageEstimate {
+  if (stick_action === "keep") {
+    return {
+      ko: "같은 작업이면 모델 유지",
+      en: "Keep the same model for the same kind of work",
+    };
+  }
+  return {
+    ko: `작업 종류가 바뀌어 ${primary}로 바꾸길 권함`,
+    en: `Task type changed — recommend switching to ${primary}`,
+  };
+}
 
 /** Estimate token/context burn from description (+ tags as weak hints) */
 export function estimateTokenRisk(
@@ -493,6 +533,8 @@ export interface CommandSignals {
   large_ui: boolean;
   architecture: boolean;
   ui: boolean;
+  /** Coding/build phase detected in the task sentence */
+  implementation: boolean;
   /** One-line WHY for reason field */
   why: string;
 }
@@ -504,7 +546,8 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
   const ui = isUiTask(t, tags);
   const architecture =
     tags.includes("architecture") ||
-    /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정/i.test(t);
+    /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정|기획|계획/i.test(t);
+  const implementation = isImplementationTask(t);
   const large_ui = ui && (LARGE_UI_RE.test(t) || (BROAD_SCOPE_RE.test(t) && ui));
 
   let budget: CommandBudget = "neutral";
@@ -523,8 +566,10 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     why = "명령에 최고품질/프리미엄 명시 → 절약 해제";
   } else if (hard_bug) {
     why = "난해 버그·CI·재현 → Terra/Codex급 필요";
-  } else if (architecture && !ui) {
-    why = "설계·트레이드오프 → Grok(설계만)";
+  } else if (architecture && !ui && !implementation) {
+    why = "설계·기획·트레이드오프 → Claude(Fable)";
+  } else if (architecture && implementation) {
+    why = "설계+구현 혼합 → 구현 신호 우선(Composer/UI면 Fable)";
   } else if (large_ui) {
     why = "넓은 UI 리디자인 → Fable 에스컬레이션";
   } else if (scope === "tiny" || TINY_SCOPE_RE.test(t)) {
@@ -532,9 +577,9 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
   } else if (ui) {
     why = "일반 UI → Sonnet(절약 기본, Fable 보류)";
   } else if (scope === "broad" || scope === "huge") {
-    why = "넓은/대량 범위 → Composer로 토큰 절약";
+    why = "넓은/대량 범위 → 기계 작업은 Composer, 설계는 Fable";
   } else {
-    why = "기본 절약: 명령에 고가 에스컬레이션 신호 없음";
+    why = "과한 고가 모델 없이 작업에 맞는 선택";
   }
 
   return {
@@ -545,6 +590,7 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     large_ui,
     architecture,
     ui,
+    implementation,
     why,
   };
 }
@@ -654,8 +700,18 @@ function buildCostAdvice(
 
   if (light && (signals.scope === "tiny" || signals.scope === "local")) {
     return {
-      ko: "이 문장이면 Composer로 충분 — Codex·Fable은 과함",
+      ko: "이 작업엔 Composer가 맞음 — Codex·Fable은 과함",
       en: "Composer fits this task — Codex/Fable would be overkill",
+    };
+  }
+  if (
+    primary === "Fable 5" &&
+    signals.architecture &&
+    !signals.implementation
+  ) {
+    return {
+      ko: "설계·트레이드오프에 Fable 적합 — 구현 단계는 Composer/Sonnet",
+      en: "Fable fits design/tradeoffs — use Composer/Sonnet to implement",
     };
   }
   if (primary === "Claude Sonnet" && signals.ui && !signals.large_ui) {
@@ -664,20 +720,26 @@ function buildCostAdvice(
       en: "Sonnet is a good fit — reserve Fable/Codex for large UI or hard bugs",
     };
   }
-  if (primary === "Fable 5") {
+  if (primary === "Fable 5" && signals.large_ui) {
     return {
       ko: signals.large_ui
-        ? "넓은 UI엔 Fable 적합 — 작은 패치면 Composer로 절약"
-        : "Fable은 무거운 편 — 작은 수정이면 Composer/Sonnet 우선",
+        ? "넓은 UI엔 Fable 적합 — 작은 패치면 Composer/Sonnet"
+        : "Fable은 UI·멀티파일용 — 작은 수정이면 Composer/Sonnet",
       en: signals.large_ui
-        ? "Fable fits broad UI — use Composer for small patches"
-        : "Fable is heavier — prefer Composer/Sonnet for small edits",
+        ? "Fable fits broad UI — Composer/Sonnet for small patches"
+        : "Fable for UI/multi-file — Composer/Sonnet for tiny edits",
+    };
+  }
+  if (primary === "Fable 5") {
+    return {
+      ko: "UI·멀티파일에 Fable 적합 — 가벼운 패치면 Composer/Sonnet",
+      en: "Fable fits UI/multi-file — Composer/Sonnet for light patches",
     };
   }
   if (primary === "Grok 5.x") {
     return {
-      ko: "설계·트레이드오프용 — 구현은 Sonnet/Composer로 넘기세요",
-      en: "For design/tradeoffs — hand off implementation to Sonnet/Composer",
+      ko: "Grok은 보조 — 설계·기획은 Claude(Fable)가 더 맞음",
+      en: "Grok is secondary — Claude(Fable) fits design/planning better",
     };
   }
   if (primary === "GPT-5 Codex") {
@@ -699,19 +761,19 @@ function buildCostAdvice(
   }
   if (heavy && preferCheaper) {
     return {
-      ko: "무거운 primary — cheaper_fallback 먼저 시도 권장",
-      en: "Heavy primary — try cheaper_fallback first",
+      ko: "무거운 primary — lighter fallback 먼저 시도 권장",
+      en: "Heavy primary — try a lighter fallback first",
     };
   }
-  if (midClaude && preferCheaper) {
+  if (midClaude && preferCheaper && !signals.architecture) {
     return {
-      ko: `${primary} 적합 — 더 가볍게는 Composer/Sonnet`,
-      en: `${primary} fits — Composer/Sonnet if you want lighter`,
+      ko: `${primary} 적합 — 더 가벼운 패치면 Composer/Sonnet`,
+      en: `${primary} fits — Composer/Sonnet if the scope is lighter`,
     };
   }
   return {
-    ko: `${primary} 적합 — 상대 비용은 relative 참고`,
-    en: `${primary} fits — see relative for approximate cost`,
+    ko: `이 작업엔 ${primary}가 맞음 — relative 참고`,
+    en: `${primary} fits this task — see relative for approximate cost`,
   };
 }
 
@@ -773,14 +835,17 @@ function applyProjectConfig(
   scores: Record<ModelId, number>,
   cfg?: ProjectConfig,
   saveBias = true,
+  opts?: { skipDesignPenalty?: boolean },
 ): void {
   if (saveBias) {
     scores["Composer 2.5"] += 12;
     scores["Claude Sonnet"] += 10;
     scores["GPT-5 Sol"] += 4;
     scores["GPT-5 Codex"] -= 6;
-    scores["Grok 5.x"] -= 4;
-    scores["Fable 5"] -= 4;
+    if (!opts?.skipDesignPenalty) {
+      scores["Grok 5.x"] -= 4;
+      scores["Fable 5"] -= 4;
+    }
   } else if (isQualityBias(cfg)) {
     scores["GPT-5 Codex"] += 8;
     scores["Grok 5.x"] += 6;
@@ -935,7 +1000,22 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores["Claude Sonnet"] += 5;
   }
 
-  applyProjectConfig(scores, cfg, saveBias && !signals.large_ui);
+  // 설계+구현 혼합 → 구현 신호 우선
+  if (signals.architecture && signals.implementation && !hardBug) {
+    scores["Composer 2.5"] += 45;
+    scores["Grok 5.x"] -= 25;
+    scores["Fable 5"] -= 10;
+    if (uiTask) {
+      scores["Fable 5"] += 40;
+      scores["Composer 2.5"] -= 15;
+    }
+  }
+
+  const pureDesign =
+    signals.architecture && !signals.implementation && !uiTask;
+  applyProjectConfig(scores, cfg, saveBias && !signals.large_ui, {
+    skipDesignPenalty: pureDesign,
+  });
 
   if (input.feedback_adjust) {
     for (const [k, v] of Object.entries(input.feedback_adjust) as [
@@ -957,10 +1037,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       alternative = primary === bugPrimary ? alternative : primary;
       primary = bugPrimary;
     }
-  } else if (signals.architecture && !uiTask && !blocked.has("Grok 5.x")) {
-    if (primary !== "Grok 5.x") {
+  } else if (
+    signals.architecture &&
+    !signals.implementation &&
+    !uiTask &&
+    !blocked.has("Fable 5")
+  ) {
+    if (primary !== "Fable 5") {
       alternative = primary;
-      primary = "Grok 5.x";
+      primary = "Fable 5";
     }
   } else if (signals.large_ui && !hardBug && !blocked.has("Fable 5")) {
     if (primary !== "Fable 5") {
@@ -992,6 +1077,31 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     }
   }
 
+  const currentResolved =
+    resolveModelId(input.current_model) ??
+    resolveModelIdFromHostId(input.current_model, host);
+
+  const designToImpl =
+    currentResolved != null &&
+    isDesignRoleModel(currentResolved) &&
+    signals.implementation;
+
+  if (
+    designToImpl ||
+    (signals.architecture && signals.implementation && !hardBug)
+  ) {
+    const implPrimary: ModelId =
+      uiTask && !blocked.has("Fable 5")
+        ? "Fable 5"
+        : blocked.has("Composer 2.5")
+          ? "Claude Sonnet"
+          : "Composer 2.5";
+    if (primary !== implPrimary && !blocked.has(implPrimary)) {
+      alternative = primary;
+      primary = implPrimary;
+    }
+  }
+
   [primary, alternative] = ensureNotBlocked(primary, alternative, scores, cfg, {
     hardBug,
   });
@@ -1001,15 +1111,16 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const cheaper_fallback_slug = cheaper_fallback.slug;
   const fallback_chain = buildFallbackChain(primary, fbOpts);
 
-  const currentResolved =
-    resolveModelId(input.current_model) ??
-    resolveModelIdFromHostId(input.current_model, host);
-  const stick_action =
-    currentResolved == null
-      ? undefined
-      : currentResolved === primary
-        ? ("keep" as const)
-        : ("switch" as const);
+  let stick_action: "keep" | "switch" | undefined;
+  if (currentResolved != null) {
+    if (designToImpl) {
+      stick_action = "switch";
+    } else if (currentResolved === primary) {
+      stick_action = "keep";
+    } else {
+      stick_action = "switch";
+    }
+  }
 
   let reason = buildReason(
     primary,
@@ -1019,10 +1130,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     fallback_chain,
   );
   if (stick_action === "keep") {
-    reason = `sticky keep · ${reason}`;
+    reason = `모델 유지 · ${reason}`;
   } else if (stick_action === "switch") {
-    reason = `switch→${primary} · ${reason}`;
+    reason = `${primary}로 전환 · ${reason}`;
   }
+
+  const model_persistence =
+    stick_action != null
+      ? buildModelPersistenceNote(stick_action, primary)
+      : undefined;
 
   const recommendation_id = makeRecommendationId(text, primary, alternative);
 
@@ -1078,6 +1194,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       ? {
           stick_action,
           current_resolved: currentResolved,
+          model_persistence,
           ...(stick_action === "keep"
             ? { sticky_suggest: "keep_silent" as const }
             : {}),
@@ -1096,13 +1213,21 @@ export function buildRecommendClarity(result: RecommendResult): {
   cost_preview: CostPreview;
   honest_limit: UsageEstimate;
 } {
-  const { primary, primary_id, primary_cost_tier, cost_preview } = result;
+  const {
+    primary,
+    primary_id,
+    primary_cost_tier,
+    cost_preview,
+    model_persistence,
+  } = result;
   const weightKo =
     cost_preview.weight === "light"
       ? "가벼움"
       : cost_preview.weight === "heavy"
         ? "무거움"
         : "보통";
+  const persistKo = model_persistence ? ` ${model_persistence.ko}.` : "";
+  const persistEn = model_persistence ? ` ${model_persistence.en}.` : "";
   return {
     for_task: {
       primary,
@@ -1110,8 +1235,8 @@ export function buildRecommendClarity(result: RecommendResult): {
       cost_tier: primary_cost_tier,
     },
     clarity: {
-      ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}). ${cost_preview.advice.ko} — MCP 호출 모델과 별개.`,
-      en: `Task recommendation: ${primary} (${primary_id}, ${cost_preview.weight}). ${cost_preview.advice.en} — separate from MCP caller.`,
+      ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}). ${cost_preview.advice.ko}.${persistKo} MCP 호출 모델과 별개.`,
+      en: `Task recommendation: ${primary} (${primary_id}, ${cost_preview.weight}). ${cost_preview.advice.en}.${persistEn} Separate from MCP caller.`,
     },
     cost_preview,
     honest_limit: {
@@ -1146,7 +1271,10 @@ export function compactRecommendResult(
     ...(result.stick_action
       ? {
           stick_action: result.stick_action,
+          model_persistence: result.model_persistence,
           sticky_suggest: result.sticky_suggest,
+          agent_note:
+            "주인님 보고 시 sticky 단어 쓰지 말 것 — model_persistence 문장 사용",
         }
       : {}),
   };

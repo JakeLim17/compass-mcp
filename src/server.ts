@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * compass-mcp — ChronoCode model recommendation MCP (stdio).
- * Purpose: pick the smallest catalog model that fits the command (save tokens).
+ * Purpose: task-fit model selection — light patch→cheap, design→Claude, hard bug→Codex.
  * Default responses are compact (verbose=false).
  */
 import { z } from "zod";
@@ -27,7 +27,7 @@ import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.5.1";
+const SERVER_VERSION = "0.6.0";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -137,8 +137,9 @@ function buildStartSessionPayload(input: {
 
   if (!verbose) {
     return {
-      sticky: stickyRes.sticky?.adopted_model ?? null,
+      adopted_model: stickyRes.sticky?.adopted_model ?? null,
       stick_action: recommend?.stick_action,
+      model_persistence: recommend?.model_persistence,
       alerts: usage.alerts.map((a) => a.code),
       usage: {
         period: usage.period,
@@ -146,7 +147,7 @@ function buildStartSessionPayload(input: {
         by_tier: usage.by_tier,
       },
       recommend,
-      tip: "Agents: summarize clarity.ko + cost_preview.advice.ko; don’t paste MCP dumps. primary/for_task ≠ caller model.",
+      tip: "Agents: summarize clarity.ko + cost_preview.advice.ko; don’t paste MCP dumps. primary/for_task ≠ caller model. 주인님 보고 시 sticky 단어 금지.",
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
       ...(includeReport
         ? {
@@ -205,7 +206,7 @@ server.tool(
 
 server.tool(
   "start_session",
-  "작업 시작(compact): sticky + alert codes + optional recommend. 주간 report는 include_report/verbose.",
+  "작업 시작(compact): 채택 모델 + alert codes + optional recommend. 주간 report는 include_report/verbose.",
   startSessionArgs,
   async (args) =>
     jsonToolResult(
@@ -234,14 +235,14 @@ server.tool(
 
 server.tool(
   "recommend_model",
-  "명령 문장 정독 → 최소 적합 모델(절약 기본). compact JSON. verbose=true면 scores 등. catalog-only + fallback_chain.",
+  "명령 문장 정독 → 작업에 맞는 모델(과한 고가 모델 회피). compact JSON. verbose=true면 scores 등. catalog-only + fallback_chain.",
   {
     task_description: z.string().describe("할 일 문장 — 의도·범위·난이도 포함해서"),
     tags: z.array(tagSchema).optional().describe("ui | bug | architecture | test"),
     current_model: z
       .string()
       .optional()
-      .describe("sticky 오버라이드. 없으면 sticky.json"),
+      .describe("현재 채택 모델 오버라이드. 없으면 adopted_model 파일"),
     host: hostSchema.describe("없으면 project/env/cursor"),
     cwd: z.string().optional().describe("project config 탐색 cwd"),
     verbose: verboseSchema,
@@ -277,7 +278,7 @@ server.tool(
         scores: result.scores,
         sticky_loaded: stickyRes.sticky?.adopted_model ?? null,
         usage_alerts: usage.alerts.map((a) => a.code),
-        note: "Save tokens: smallest catalog model that fits. Task model=cheaper_fallback_slug when prefer_cheaper; unavailable→fallback_chain.",
+        note: "Task-fit routing: light→Composer, design→Fable, hard bug→Codex. Task model=cheaper_fallback_slug when prefer_cheaper; unavailable→fallback_chain.",
       },
       true,
     );
@@ -286,7 +287,7 @@ server.tool(
 
 server.tool(
   "get_sticky",
-  "채택 모델 sticky 조회.",
+  "채택 모델 조회 (내부: sticky.json).",
   { verbose: verboseSchema },
   async ({ verbose }) => {
     const result = getSticky();
@@ -302,7 +303,7 @@ server.tool(
 
 server.tool(
   "set_sticky",
-  "채택 모델 sticky 저장.",
+  "채택 모델 저장 (같은 작업이면 유지용).",
   {
     adopted_model: z.string().describe("표시명 또는 Task slug"),
     host: hostSchema,
@@ -323,7 +324,7 @@ server.tool(
 
 server.tool(
   "clear_sticky",
-  "sticky 삭제.",
+  "채택 모델 기록 삭제.",
   {},
   async () => jsonToolResult(clearSticky()),
 );
@@ -385,6 +386,7 @@ server.tool(
       return jsonToolResult({
         meta: {
           reading: EXAMPLE_PROMPTS_META.reading_recommendation,
+          model_persistence: EXAMPLE_PROMPTS_META.model_persistence,
         },
         prompts: list.map((e) => ({
           category: e.category,

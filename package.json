@@ -1,9 +1,9 @@
 {
   "name": "compass-mcp",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "license": "MIT",
-  "description": "Compass MCP — save tokens: smallest Cursor-catalog model that fits the command",
+  "description": "Compass MCP — task-fit model routing for Cursor (design→Claude, patch→Composer, bug→Codex)",
   "type": "module",
   "bin": {
     "compass-mcp": "./dist/server.js"

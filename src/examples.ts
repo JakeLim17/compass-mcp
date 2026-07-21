@@ -21,7 +21,7 @@ export interface ExamplePrompt {
   tags?: Tag[];
   /** Expected primary after scoring (hint for agents / docs) */
   expected_primary: ModelId;
-  /** Optional sticky note for this example */
+  /** Optional note for this example */
   note?: string;
 }
 
@@ -57,20 +57,20 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     tags: ["bug"],
     expected_primary: "GPT-5 Codex",
   },
-  // —— architecture → Grok 5.x ——
+  // —— architecture → Claude Fable (design/plan) ——
   {
     category: "architecture",
     ko: "결제 모듈 구조 설계랑 기술 선택 트레이드오프 정리해줘",
     en: "Design the payment module structure and summarize tech-choice trade-offs",
     tags: ["architecture"],
-    expected_primary: "Grok 5.x",
+    expected_primary: "Fable 5",
   },
   {
     category: "architecture",
     ko: "이 기능을 어떻게 짤지 아키텍처 의사결정만 먼저 해줘",
     en: "First decide the architecture for how we should build this feature",
     tags: ["architecture"],
-    expected_primary: "Grok 5.x",
+    expected_primary: "Fable 5",
   },
   // —— light patch / i18n → Composer 2.5 ——
   {
@@ -100,15 +100,15 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Continuing the same dashboard layout work — do I need to ask for a model again?",
     tags: ["ui"],
     expected_primary: "Claude Sonnet",
-    note: "Same context → sticky keep; do not re-ask. Agents: don’t paste full MCP dumps.",
+    note: "Same context → keep model; do not re-ask. Agents: don’t paste full MCP dumps.",
   },
 ];
 
 export const EXAMPLE_PROMPTS_META = {
-  sticky:
-    "Same context = keep adopted model (no re-ask). Context / task-type change = call recommend_model again and present primary + alternative on switch.",
+  model_persistence:
+    "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Save/cheap default may map normal UI to Sonnet; quality expect (cost_bias quality / premium wording / large redesign) may escalate the same UI work to Fable. Document both honestly — do not claim Fable as the cheap primary.",
+    "Default avoids overspending — light patch→Composer, design→Fable, hard bug→Codex. quality/premium wording may escalate UI to Fable. Document both honestly.",
   reading_recommendation:
     "primary / for_task = task recommendation only. The agent or Task worker that called this MCP (e.g. Composer) may differ — check clarity.ko in recommend_model.",
   honest_limit:

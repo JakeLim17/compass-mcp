@@ -53,7 +53,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
     id: "cursor",
     display_name: "Cursor",
     note:
-      "Only recommend CURSOR_AGENT_CATALOG slugs. Claude: Sonnet<Opus<Fable · GPT: Sol<Terra. Task model=primary_slug or cheaper_fallback_slug; unavailable → fallback_chain.",
+      "Only recommend CURSOR_AGENT_CATALOG slugs. Claude: Sonnet<Opus<Fable (design/plan) · GPT: Sol<Terra. Task model=primary_slug or cheaper_fallback_slug; unavailable → fallback_chain.",
     ids: { ...CURSOR_IDS },
   },
   claude: {

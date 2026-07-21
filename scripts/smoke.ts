@@ -80,8 +80,26 @@ const cases: Case[] = [
       task_description: "결제 모듈 구조 설계와 기술 선택",
       tags: ["architecture"],
     },
-    expectPrimary: "Grok 5.x",
+    expectPrimary: "Fable 5",
     expectCost: "medium-high",
+  },
+  {
+    name: "설계→구현 switch",
+    input: {
+      task_description: "방금 설계한 결제 모듈 구현해보자",
+      current_model: "Grok 5.x",
+    },
+    expectPrimary: "Composer 2.5",
+    expectStick: "switch",
+  },
+  {
+    name: "설계+구현 혼합",
+    input: {
+      task_description: "결제 모듈 설계 구현 해보자",
+      current_model: "claude-fable-5-thinking-high",
+    },
+    expectPrimary: "Composer 2.5",
+    expectStick: "switch",
   },
   {
     name: "버그/CI → Terra",
@@ -318,7 +336,7 @@ for (const ex of EXAMPLE_PROMPTS) {
     forTask?.cost_tier === r.primary_cost_tier &&
     !!clarity?.ko &&
     clarity.ko.includes("작업용 추천") &&
-    clarity.ko.includes("충분") &&
+    clarity.ko.includes("맞음") &&
     !!clarity?.en &&
     !!honest?.ko &&
     honest.ko.includes("자동 전환") &&
@@ -350,7 +368,7 @@ for (const ex of EXAMPLE_PROMPTS) {
     !!bug.cost_preview.advice.ko &&
     bug.cost_preview.relative.ko.includes("4–5×") &&
     buildCostPreview("Composer 2.5", "low", analyzeCommand("한 줄"), true)
-      .advice.ko.includes("충분");
+      .advice.ko.includes("맞음");
   console.log(`[${ok ? "OK" : "FAIL"}] cost_preview weight + advice`);
   extraChecks += 1;
   if (!ok) failed += 1;
@@ -489,7 +507,7 @@ try {
     cursor.primary_slug === "composer-2.5-fast" &&
     claude.primary === "GPT-5 Codex" &&
     claude.cheaper_fallback.name === "GPT-5 Sol" &&
-    openai.primary === "Grok 5.x" &&
+    openai.primary === "Fable 5" &&
     generic.host === "generic" &&
     generic.primary_id === "role:sonnet";
   console.log(
