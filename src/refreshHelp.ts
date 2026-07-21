@@ -27,6 +27,7 @@ export const EXPECTED_TOOL_NAMES = [
   "start_session",
   "session_check",
   "check_update",
+  "verify_run_compliance",
   "how_to_refresh_mcp",
   "recommend_model",
   "get_sticky",

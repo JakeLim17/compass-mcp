@@ -14,6 +14,7 @@ import {
 } from "./hosts.js";
 import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
+import { buildMustDo } from "./mustDo.js";
 
 export type ModelId =
   | "Composer 2.5"
@@ -1385,10 +1386,12 @@ const AGENT_NOTE = {
 /** Compact tool payload — default for agents (token-light) */
 export function compactRecommendResult(
   result: RecommendResult,
+  opts?: { mcp_version?: string },
 ): Record<string, unknown> {
   const { for_task, clarity, cost_preview, honest_limit } =
     buildRecommendClarity(result);
   const run_hint = buildRunHint(result);
+  const must_do = buildMustDo(result);
   return {
     primary: result.primary,
     alternative: result.alternative,
@@ -1406,7 +1409,9 @@ export function compactRecommendResult(
     reason: result.reason,
     host: result.host,
     recommendation_id: result.recommendation_id,
+    mcp_version: opts?.mcp_version ?? null,
     run_hint,
+    must_do,
     agent_note: AGENT_NOTE,
     ...(result.stick_action
       ? {

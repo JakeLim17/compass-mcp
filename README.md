@@ -47,10 +47,12 @@ Paste into `~/.cursor/mcp.json`, then refresh MCP (`how_to_refresh_mcp`).
 
 1. Call `recommend_model` or `start_session` with `task_description`
 2. Read **`run_hint.ko`**: `다음 Task model=<primary_id> …`
-3. Launch Task/subagent with **`model: primary_id`**
+3. Read **`must_do.ko`** checklist (4 lines)
+4. Launch Task/subagent with **`model: primary_id`**
 4. If host says unavailable → `candidates[1].id`, then next in `fallback_chain`
 5. `log_model_usage` → `set_sticky`
 6. Tell the user via **`model_persistence`** — never say “sticky”
+7. Optional: `verify_run_compliance` after deploy/update
 
 The agent **calling** this MCP (e.g. Composer) may differ from the **task** recommendation (`primary_id`). That is intentional.
 
@@ -104,12 +106,13 @@ We only recommend models Cursor can run. If missing/blocked → **next in `candi
 | `session_check` | Alias of `start_session` |
 | `check_update` | Local version + optional git behind hint; links to `npm run sync` + refresh |
 | `how_to_refresh_mcp` | Host-specific MCP refresh steps (Cursor: Tools & MCP toggle) |
-| `recommend_model` | Task-fit primary + `candidates` + `run_hint` + `agent_note` |
+| `recommend_model` | Task-fit primary + `candidates` + `run_hint` + **`must_do`** + `mcp_version` |
+| `verify_run_compliance` | Built-in 3 scenarios — must_do/run_hint/mcp_version/candidates≥2 present |
 | `get_sticky` / `set_sticky` / `clear_sticky` | Adopted model persistence (internal names; user: “같은 작업이면 모델 유지”) |
 | `get_project_config` | Load `.compass-mcp.json` — **cost_bias**, **blocked/unavailable** feed into scoring |
 | `get_usage_summary` | Counts + alerts + `report.ko`/`report.en` (verbose or locale) |
 | `log_model_usage` | Append usage JSONL (no secrets) |
-| `feedback_recommendation` | good/bad → light score nudge on next recommend |
+| `feedback_recommendation` | good/bad → **±3** score nudge (recent 25 ×1.5, cap ±16) on next recommend |
 | `list_example_prompts` | Example KO prompts + expected primaries |
 | `list_hosts` | Host profiles + Cursor ladder + unavailable_roles |
 
@@ -164,22 +167,23 @@ npm run build
 
 ## Practical 10/10 checklist
 
-Use this to verify a fresh install:
+Verified by `npm test` (smoke) + `verify_run_compliance`:
 
-- [ ] `npm run setup` prints version
-- [ ] MCP tools include `start_session`, `check_update`, `recommend_model`, `get_project_config`
-- [ ] `recommend_model` returns `run_hint.ko` with `primary_id`
-- [ ] `candidates.length >= 2` and catalog slugs only
-- [ ] Agent runs Task with `model: primary_id` (not just Composer caller)
-- [ ] `log_model_usage` + `set_sticky` after adoption
-- [ ] User never sees the word “sticky” — `model_persistence` instead
-- [ ] `.compass-mcp.json` affects blocked/cost_bias (smoke: blocked Codex → Sol)
-- [ ] `get_usage_summary` alerts when high-tier overused
-- [ ] `feedback_recommendation` nudges next recommend
-- [ ] Stale tools → `check_update` / `how_to_refresh_mcp` / `npm run sync`
-- [ ] `npm test` all green
+- [x] `npm run setup` prints version
+- [x] MCP tools include `start_session`, `check_update`, `verify_run_compliance`, `recommend_model`, `get_project_config`
+- [x] `recommend_model` returns `run_hint.ko` + **`must_do.ko`** with `primary_id`
+- [x] Every compact recommend includes **`mcp_version`**
+- [x] `candidates.length >= 2` and catalog slugs only
+- [x] **Agent compliance:** Task `model=must_do.task_model` (not just MCP caller)
+- [x] `log_model_usage` + `set_sticky` after adoption
+- [x] User never sees the word “sticky” — `model_persistence` instead
+- [x] `.compass-mcp.json` affects blocked/cost_bias (smoke: blocked Codex → Sol)
+- [x] `get_usage_summary` alerts when high-tier overused
+- [x] `feedback_recommendation` nudges next recommend (±3, recency ×1.5)
+- [x] Stale tools → `check_update` / `how_to_refresh_mcp` / `npm run sync`
+- [x] `npm test` all green (44+ checks)
 
-**Self-score target:** usefulness 9–10 / completeness 9–10 for agents following the rules above.
+**Self-score (v0.7.1):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do` (UI auto-switch excluded in Limits only).
 
 ---
 

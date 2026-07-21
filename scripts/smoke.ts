@@ -25,6 +25,7 @@ import {
   EXPECTED_TOOL_NAMES,
   mcpRefreshSessionHint,
 } from "../src/refreshHelp.ts";
+import { verifyBuiltInScenarios, verifyRecommendPayload } from "../src/compliance.ts";
 import { getUsageSummary, logModelUsage } from "../src/usage.ts";
 import { getVersionInfo, buildUpdateHint } from "../src/version.ts";
 
@@ -344,7 +345,7 @@ for (const ex of EXAMPLE_PROMPTS) {
 // compact payload
 {
   const r = recommendModel({ task_description: "i18n 한 줄" });
-  const c = compactRecommendResult(r);
+  const c = compactRecommendResult(r, { mcp_version: "0.7.1" });
   const clarity = c.clarity as { ko?: string; en?: string } | undefined;
   const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
   const costPreview = c.cost_preview as
@@ -383,6 +384,9 @@ for (const ex of EXAMPLE_PROMPTS) {
       r.primary_id,
     ) &&
     !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
+    c.mcp_version === "0.7.1" &&
+    !!(c.must_do as { ko?: string[]; task_model?: string })?.ko?.length &&
+    (c.must_do as { task_model?: string }).task_model === r.primary_id &&
     !("scores" in c) &&
     !("usage_estimate" in c);
   console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity + cost_preview`);
@@ -599,11 +603,22 @@ try {
   const v = getVersionInfo({ skip_fetch: true });
   const hint = buildUpdateHint(v, "ko");
   const ok =
-    v.version === "0.7.0" &&
+    v.version === "0.7.1" &&
     v.name === "compass-mcp" &&
     !!hint.message &&
-    EXPECTED_TOOL_NAMES.includes("check_update");
+    EXPECTED_TOOL_NAMES.includes("check_update") &&
+    EXPECTED_TOOL_NAMES.includes("verify_run_compliance");
   console.log(`[${ok ? "OK" : "FAIL"}] check_update version=${v.version}`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+{
+  const builtIn = verifyBuiltInScenarios("0.7.1");
+  const ok = builtIn.ok && builtIn.checks.length >= 15;
+  console.log(
+    `[${ok ? "OK" : "FAIL"}] verify_run_compliance built_in checks=${builtIn.checks.filter((x) => !x.ok).length} fail`,
+  );
   extraChecks += 1;
   if (!ok) failed += 1;
 }

@@ -20,6 +20,10 @@ import {
   type Tag,
 } from "./recommend.js";
 import {
+  verifyBuiltInScenarios,
+  verifyRecommendPayload,
+} from "./compliance.js";
+import {
   buildHowToRefreshMcp,
   mcpRefreshSessionHint,
 } from "./refreshHelp.js";
@@ -28,7 +32,7 @@ import { getUsageSummary, logModelUsage } from "./usage.js";
 import { buildUpdateHint, getVersionInfo } from "./version.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.7.0";
+const SERVER_VERSION = "0.7.1";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -128,12 +132,12 @@ function buildStartSessionPayload(input: {
     });
     recommend = verbose
       ? {
-          ...compactRecommendResult(result),
+          ...compactRecommendResult(result, { mcp_version: SERVER_VERSION }),
           cheaper_fallback: result.cheaper_fallback,
           usage_estimate: result.usage_estimate,
           scores: result.scores,
         }
-      : compactRecommendResult(result);
+      : compactRecommendResult(result, { mcp_version: SERVER_VERSION });
   }
 
   const versionInfo = getVersionInfo({ skip_fetch: true });
@@ -147,6 +151,7 @@ function buildStartSessionPayload(input: {
       stick_action: recommend?.stick_action,
       model_persistence: recommend?.model_persistence,
       run_hint: recommend?.run_hint ?? null,
+      must_do: recommend?.must_do ?? null,
       alerts: usage.alerts.map((a) => a.code),
       usage: {
         period: usage.period,
@@ -272,11 +277,13 @@ server.tool(
     });
 
     if (!verbose) {
-      return jsonToolResult(compactRecommendResult(result));
+      return jsonToolResult(
+        compactRecommendResult(result, { mcp_version: SERVER_VERSION }),
+      );
     }
     return jsonToolResult(
       {
-        ...compactRecommendResult(result),
+        ...compactRecommendResult(result, { mcp_version: SERVER_VERSION }),
         alternative_slug: result.alternative_slug,
         cheaper_fallback: result.cheaper_fallback,
         primary_cost_tier: result.primary_cost_tier,
@@ -337,6 +344,58 @@ server.tool(
 );
 
 server.tool(
+  "verify_run_compliance",
+  "에이전트 준수 검증: compact recommend에 must_do·run_hint·mcp_version·candidates≥2 필수. 내장 시나리오 3건 + optional task_description.",
+  {
+    task_description: z
+      .string()
+      .optional()
+      .describe("있으면 해당 task로 1건 추가 검증"),
+    tags: z.array(tagSchema).optional(),
+    locale: localeSchema.optional(),
+  },
+  async ({ task_description, tags, locale }) => {
+    const builtIn = verifyBuiltInScenarios(SERVER_VERSION);
+    const reports = [{ label: "built_in", ...builtIn }];
+
+    if (task_description?.trim()) {
+      const result = recommendModel({
+        task_description,
+        tags: tags as Tag[] | undefined,
+      });
+      const compact = compactRecommendResult(result, {
+        mcp_version: SERVER_VERSION,
+      });
+      const one = verifyRecommendPayload(compact);
+      reports.push({ label: "task", ...one });
+    }
+
+    const ok = reports.every((r) => r.ok);
+    const loc = locale ?? "ko";
+    return jsonToolResult({
+      ok,
+      mcp_version: SERVER_VERSION,
+      must_do_template: {
+        ko: [
+          "Task/subagent model=<primary_id>",
+          "unavailable → candidates[1].id",
+          "log_model_usage → set_sticky",
+          "주인님껀 model_persistence만",
+        ],
+      },
+      reports,
+      agent_compliance: ok
+        ? loc === "ko"
+          ? "준수 필드 OK — Task model=must_do.task_model 실행"
+          : "Compliance fields OK — run Task with must_do.task_model"
+        : loc === "ko"
+          ? "누락 필드 있음 — npm run sync 후 how_to_refresh_mcp"
+          : "Missing fields — npm run sync then how_to_refresh_mcp",
+    });
+  },
+);
+
+server.tool(
   "check_update",
   "로컬 compass-mcp 버전 + (git 있으면) origin behind 힌트. stale 도구면 how_to_refresh_mcp.",
   {
@@ -384,7 +443,7 @@ server.tool(
 
 server.tool(
   "feedback_recommendation",
-  "추천 good/bad 피드백 (로컬 미세 가산).",
+  "추천 good/bad 피드백 (로컬 가산 ±3, 최근 25건 ×1.5, cap ±16).",
   {
     vote: voteSchema,
     primary: z.string().optional(),
