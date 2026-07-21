@@ -119,16 +119,27 @@ File: `~/.cursor/compass-mcp/sticky.json` — `recommend_model` / `start_session
 
 ---
 
-## Token risk & tiers
+## Token risk & Claude cheaper ladder
 
-| `token_risk` | Behavior |
-|--------------|----------|
-| `low` | Quality-first (usually Composer) |
-| `medium` | Normal scoring |
-| `high` + bulk | Cheaper primary (`prefer_cheaper`) |
-| `high` + hard bug | Codex stays; explore with Composer first |
+Approx relative cost: **Composer < Sonnet < Opus < Fable/Codex** (Grok = design-mid, off the Claude ladder).
 
-Tiers: `low`=Composer · `mid`=Fable/Grok · `high`=Codex.
+| Trigger | Behavior |
+|---------|----------|
+| `token_risk=low` | Quality-first (usually Composer) |
+| `token_risk=medium` | Normal scoring |
+| `prefer_cheaper` + bulk | Composer primary |
+| `prefer_cheaper` + UI | **Claude Sonnet** primary (quality-cheap vs Fable) |
+| `prefer_cheaper` + hard bug | Codex primary; `cheaper_fallback` = **Sonnet** (explore first) |
+| `cost_bias: prefer_cheaper\|cheap` / usage alerts | Sets `prefer_cheaper` |
+
+Every `recommend_model` response includes:
+
+- `cheaper_fallback`: `{ name, slug, tier }`
+- `cheaper_fallback_slug` — use as Cursor Task `model` when saving tokens
+
+**Honest limit:** Cursor chat UI dropdown does **not** auto-switch. Agents set Task `model` to `primary_slug` or `cheaper_fallback_slug` (Sonnet/Composer).
+
+Tiers: `low`=Composer · `mid`=Sonnet/Opus/Fable/Grok · `high`=Codex.
 
 ---
 
@@ -145,6 +156,7 @@ npm run build
 ## Limits
 
 - Chat UI dropdown does not auto-switch  
+- Cursor **does** support Claude Sonnet/Opus via Task `model` slug (`cheaper_fallback_slug`)  
 - Claude/OpenAI host ids are approximate (`src/hosts.ts`)  
 - Cost/token_risk are relative, not dollars / live quota  
 
@@ -154,4 +166,4 @@ npm run build
 
 ---
 
-**한국어:** 바이브코딩용 로컬 모델 추천 MCP. `git clone` → `npm run setup` → mcp.json → **MCP 새로고침**(`how_to_refresh_mcp`). 작업 시작은 `start_session` 한 번. 주간 리포트는 `get_usage_summary(period=week)`. 프로젝트 루트에 `.compass-mcp.json.example` 복사.
+**한국어:** 바이브코딩용 로컬 모델 추천 MCP. Claude 폴백 사다리 `Composer < Sonnet < Opus < Fable/Codex`. `prefer_cheaper`면 Task `model`에 `cheaper_fallback_slug`(또는 Sonnet). UI 드롭다운 자동전환은 불가. `git clone` → `npm run setup` → mcp.json → **MCP 새로고침**(`how_to_refresh_mcp`).

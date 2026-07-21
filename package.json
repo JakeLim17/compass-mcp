@@ -1,9 +1,9 @@
 {
   "name": "compass-mcp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
-  "description": "Compass MCP — ChronoCode model recommendation (start_session, how_to_refresh_mcp, sticky, weekly usage report, project config)",
+  "description": "Compass MCP — ChronoCode model recommendation with Claude Sonnet/Opus cheaper fallback ladder",
   "type": "module",
   "bin": {
     "compass-mcp": "./dist/server.js"

@@ -8,10 +8,11 @@ import type { ModelTier } from "./recommend.js";
 
 export const PROJECT_CONFIG_FILENAME = ".compass-mcp.json";
 
-/** prefer_cheaper aliases: prefer_cheap · quality aliases: prefer_quality */
+/** prefer_cheaper aliases: prefer_cheap · cheap · quality aliases: prefer_quality */
 export type CostBias =
   | "prefer_cheaper"
   | "prefer_cheap"
+  | "cheap"
   | "balanced"
   | "quality"
   | "prefer_quality";
@@ -45,9 +46,11 @@ export interface LoadProjectConfigResult {
 export const PROJECT_CONFIG_SCHEMA_DOC = {
   preferred_host: "cursor | claude | openai | generic (optional)",
   default_tier: "low | mid | high — soft score nudge",
-  blocked_models: ["Composer 2.5 | Fable 5 | Grok 5.x | GPT-5 Codex | slug"],
+  blocked_models: [
+    "Composer 2.5 | Claude Sonnet | Claude Opus | Fable 5 | Grok 5.x | GPT-5 Codex | slug",
+  ],
   cost_bias:
-    "prefer_cheaper | balanced | quality (aliases: prefer_cheap, prefer_quality)",
+    "prefer_cheaper | balanced | quality (aliases: prefer_cheap, cheap, prefer_quality)",
   usage_alert_thresholds: {
     high_tier_today: 3,
     heavy_today: 8,
@@ -65,6 +68,7 @@ const VALID_TIERS = new Set<ModelTier>(["low", "mid", "high"]);
 const VALID_BIAS = new Set<CostBias>([
   "prefer_cheaper",
   "prefer_cheap",
+  "cheap",
   "balanced",
   "quality",
   "prefer_quality",

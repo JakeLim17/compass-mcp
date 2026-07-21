@@ -23,7 +23,7 @@ import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.3.1";
+const SERVER_VERSION = "0.4.0";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -96,6 +96,7 @@ function buildStartSessionPayload(input: {
       host: input.host,
       project_config: project.config,
       feedback_adjust,
+      usage_prefer_cheaper: usage.alerts.length > 0,
     });
     recommend = {
       primary: result.primary,
@@ -110,6 +111,8 @@ function buildStartSessionPayload(input: {
       primary_tier: result.primary_tier,
       token_risk: result.token_risk,
       prefer_cheaper: result.prefer_cheaper,
+      cheaper_fallback: result.cheaper_fallback,
+      cheaper_fallback_slug: result.cheaper_fallback_slug,
       usage_estimate: result.usage_estimate,
       ...(result.stick_action
         ? {
@@ -204,7 +207,7 @@ server.tool(
 
 server.tool(
   "recommend_model",
-  "작업 설명(+태그)으로 모델 추천. sticky.json·.compass-mcp.json·feedback 반영. token_risk·tier·prefer_cheaper·recommendation_id 포함. Cursor UI 자동 전환 불가.",
+  "작업 설명(+태그)으로 모델 추천. sticky·project·feedback·usage alerts 반영. token_risk·prefer_cheaper·cheaper_fallback(Sonnet/Composer)·recommendation_id 포함. Cursor UI 자동 전환 불가 — Task model slug만.",
   {
     task_description: z
       .string()
@@ -231,6 +234,10 @@ server.tool(
     const stickyRes = getSticky();
     const project = loadProjectConfig({ startDir: cwd });
     const feedback_adjust = getFeedbackAdjustments();
+    const usage = getUsageSummary({
+      period: "week",
+      alert_thresholds: project.config.usage_alert_thresholds,
+    });
     const fromSticky = stickyRes.sticky?.adopted_model;
     const effectiveCurrent = current_model?.trim() || fromSticky;
 
@@ -241,6 +248,7 @@ server.tool(
       host,
       project_config: project.config,
       feedback_adjust,
+      usage_prefer_cheaper: usage.alerts.length > 0,
     });
 
     const payload = {
@@ -259,10 +267,13 @@ server.tool(
       alternative_tier: result.alternative_tier,
       token_risk: result.token_risk,
       prefer_cheaper: result.prefer_cheaper,
+      cheaper_fallback: result.cheaper_fallback,
+      cheaper_fallback_slug: result.cheaper_fallback_slug,
       usage_estimate: result.usage_estimate,
       scores: result.scores,
       sticky_loaded: stickyRes.sticky,
       project_config_path: project.path,
+      usage_alerts: usage.alerts,
       ...(result.stick_action
         ? {
             stick_action: result.stick_action,
@@ -270,7 +281,7 @@ server.tool(
             sticky_suggest: result.sticky_suggest,
           }
         : {}),
-      note: "SSOT=compass-mcp. Chat UI auto-switch unavailable. Flow: get_sticky → recommend_model → (pick) log_model_usage → set_sticky. stick_action=keep → keep_silent. After pick, optional feedback_recommendation.",
+      note: "SSOT=compass-mcp. Chat UI auto-switch unavailable. Claude ladder: Composer < Sonnet < Opus < Fable/Codex. When prefer_cheaper, Task model=cheaper_fallback_slug (or Sonnet). Flow: get_sticky → recommend_model → log_model_usage → set_sticky.",
     };
     return {
       content: [
@@ -449,7 +460,7 @@ server.tool(
 
 server.tool(
   "list_hosts",
-  "Available host profiles (cursor/claude/openai/generic) + role→id maps. Claude/OpenAI ids are approximate — edit src/hosts.ts.",
+  "Available host profiles (cursor/claude/openai/generic) + role→id maps including Claude Sonnet/Opus. Claude/OpenAI ids approximate — edit src/hosts.ts. Cursor: Task model fallback OK; UI dropdown does not auto-switch.",
   {},
   async () => {
     const payload = {
@@ -459,7 +470,9 @@ server.tool(
         process.env.MODEL_ROUTER_HOST ??
         null,
       hosts: listHostProfiles(),
-      note: "Pass recommend_model.host or set COMPASS_MCP_HOST. forge/openclaw alias → generic.",
+      claude_ladder:
+        "Composer < Sonnet < Opus < Fable/Codex (approx). Cursor Task can use cheaper_fallback_slug (Sonnet/Composer); chat UI dropdown still manual.",
+      note: "Pass recommend_model.host or set COMPASS_MCP_HOST. forge/openclaw alias → generic. prefer_cheaper → Task model=cheaper_fallback_slug or Sonnet.",
     };
     return {
       content: [

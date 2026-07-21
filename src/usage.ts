@@ -172,16 +172,16 @@ function buildAlerts(
     alerts.push({
       level: "warn",
       code: "high_tier_today",
-      en: `High-tier (Codex) used ${high}× today (threshold ${thresholds.high_tier_today}). Prefer Composer for the next light/bulk jobs.`,
-      ko: `오늘 고비용(Codex) ${high}회 (기준 ${thresholds.high_tier_today}). 다음 가벼운·대량 작업은 Composer 위주로.`,
+      en: `High-tier (Codex) used ${high}× today (threshold ${thresholds.high_tier_today}). Prefer Composer (bulk) or Claude Sonnet (quality-cheap); Task model=cheaper_fallback_slug.`,
+      ko: `오늘 고비용(Codex) ${high}회 (기준 ${thresholds.high_tier_today}). 대량은 Composer, 품질 유지는 Claude Sonnet; Task model=cheaper_fallback_slug.`,
     });
   }
   if (heavy >= thresholds.heavy_today) {
     alerts.push({
       level: high >= thresholds.high_tier_today ? "warn" : "info",
       code: "heavy_today",
-      en: `Mid/high models used ${heavy}× today (threshold ${thresholds.heavy_today}). Bias toward cheaper primary unless stuck.`,
-      ko: `오늘 중·고가 모델 ${heavy}회 (기준 ${thresholds.heavy_today}). 막히지 않았으면 저가 primary 우선.`,
+      en: `Mid/high models used ${heavy}× today (threshold ${thresholds.heavy_today}). Bias Composer/Sonnet unless stuck (Claude ladder: Composer < Sonnet < Opus < Fable/Codex).`,
+      ko: `오늘 중·고가 모델 ${heavy}회 (기준 ${thresholds.heavy_today}). 막히지 않았으면 Composer/Sonnet 우선 (사다리: Composer < Sonnet < Opus < Fable/Codex).`,
     });
   }
   return alerts;

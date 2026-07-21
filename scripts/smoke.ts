@@ -30,7 +30,7 @@ type Case = {
     current_model?: string;
     project_config?: {
       blocked_models?: string[];
-      cost_bias?: "prefer_cheap" | "balanced" | "prefer_quality";
+      cost_bias?: "prefer_cheap" | "prefer_cheaper" | "balanced" | "prefer_quality";
       preferred_host?: "cursor" | "claude" | "openai" | "generic";
     };
   };
@@ -39,6 +39,7 @@ type Case = {
   expectCost?: CostTier;
   expectTokenRisk?: TokenRisk;
   expectPreferCheaper?: boolean;
+  expectFallback?: string;
 };
 
 const cases: Case[] = [
@@ -52,7 +53,7 @@ const cases: Case[] = [
     name: "UI 태그",
     input: { task_description: "대시보드 레이아웃 리팩터", tags: ["ui"] },
     expectPrimary: "Fable 5",
-    expectCost: "medium",
+    expectCost: "medium-high",
   },
   {
     name: "아키텍처",
@@ -112,9 +113,10 @@ const cases: Case[] = [
     expectCost: "low",
     expectTokenRisk: "high",
     expectPreferCheaper: true,
+    expectFallback: "Composer 2.5",
   },
   {
-    name: "token high hard-bug → Codex + prefer_cheaper",
+    name: "token high hard-bug → Codex + Sonnet fallback",
     input: {
       task_description:
         "CI 실패 재현과 난해한 타입 에러 — 긴 로그·대량 스택트레이스 전체 분석",
@@ -124,6 +126,7 @@ const cases: Case[] = [
     expectCost: "high",
     expectTokenRisk: "high",
     expectPreferCheaper: true,
+    expectFallback: "Claude Sonnet",
   },
   {
     name: "token low i18n",
@@ -131,6 +134,18 @@ const cases: Case[] = [
     expectPrimary: "Composer 2.5",
     expectTokenRisk: "low",
     expectPreferCheaper: false,
+    expectFallback: "Composer 2.5",
+  },
+  {
+    name: "cost_bias cheap UI → Sonnet primary",
+    input: {
+      task_description: "대시보드 레이아웃 리팩터",
+      tags: ["ui"],
+      project_config: { cost_bias: "prefer_cheaper" },
+    },
+    expectPrimary: "Claude Sonnet",
+    expectPreferCheaper: true,
+    expectFallback: "Composer 2.5",
   },
   {
     name: "project blocked Codex",
@@ -158,6 +173,12 @@ for (const c of cases) {
     c.expectPreferCheaper == null
       ? true
       : r.prefer_cheaper === c.expectPreferCheaper;
+  const fallbackOk =
+    !!r.cheaper_fallback?.name &&
+    !!r.cheaper_fallback_slug &&
+    r.cheaper_fallback.slug === r.cheaper_fallback_slug &&
+    (c.expectFallback == null ||
+      r.cheaper_fallback.name === c.expectFallback);
   const estimateOk =
     !!r.usage_estimate?.en &&
     !!r.usage_estimate?.ko &&
@@ -178,6 +199,7 @@ for (const c of cases) {
     costOk &&
     riskOk &&
     preferOk &&
+    fallbackOk &&
     estimateOk &&
     keepSilentOk;
   const mark = ok ? "OK" : "FAIL";
@@ -185,6 +207,7 @@ for (const c of cases) {
     `[${mark}] ${c.name}: primary=${r.primary} slug=${r.primary_slug} alt=${r.alternative}` +
       ` cost=${r.primary_cost_tier} tier=${r.primary_tier}` +
       ` risk=${r.token_risk} prefer_cheaper=${r.prefer_cheaper}` +
+      ` fallback=${r.cheaper_fallback?.name}` +
       (r.stick_action ? ` stick=${r.stick_action}` : ""),
   );
   if (!ok) {
@@ -192,7 +215,9 @@ for (const c of cases) {
     console.error(
       `  expected primary=${c.expectPrimary}` +
         (c.expectStick ? ` stick=${c.expectStick}` : "") +
+        (c.expectFallback ? ` fallback=${c.expectFallback}` : "") +
         `, got primary=${r.primary} stick=${r.stick_action ?? "(none)"}` +
+        ` fallback=${r.cheaper_fallback?.name}` +
         ` risk=${r.token_risk} id=${r.recommendation_id}`,
     );
   }
@@ -393,18 +418,54 @@ try {
     cursor.host === "cursor" &&
     cursor.primary_id === cursor.primary_slug &&
     cursor.primary_cost_tier === "low" &&
+    !!cursor.cheaper_fallback_slug &&
     claude.host === "claude" &&
     claude.primary === "GPT-5 Codex" &&
     claude.primary_id.includes("opus") &&
+    claude.cheaper_fallback.name === "Claude Sonnet" &&
     openai.host === "openai" &&
     openai.primary === "Grok 5.x" &&
     generic.host === "generic" &&
     generic.primary_id === "role:mid";
   console.log(
-    `[${hostOk ? "OK" : "FAIL"}] hosts: cursor=${cursor.primary_id} claude=${claude.primary_id}`,
+    `[${hostOk ? "OK" : "FAIL"}] hosts: cursor=${cursor.primary_id} claude=${claude.primary_id} fallback=${claude.cheaper_fallback.name}`,
   );
   extraChecks += 1;
   if (!hostOk) failed += 1;
+}
+
+// prefer_cheaper fallback presence (Sonnet/Composer)
+{
+  const bulk = recommendModel({
+    task_description:
+      "전체 코드베이스 대량 리팩터 전부 — 모든 파일 일괄 rename·마이그레이션",
+  });
+  const uiCheap = recommendModel({
+    task_description: "랜딩 페이지 화면 UX 다듬기",
+    tags: ["ui"],
+    project_config: { cost_bias: "prefer_cheaper" },
+  });
+  const hard = recommendModel({
+    task_description: "CI 실패 재현과 난해한 타입 에러 — 긴 로그 전체 분석",
+    tags: ["bug"],
+  });
+  const fbOk =
+    bulk.prefer_cheaper &&
+    bulk.primary === "Composer 2.5" &&
+    bulk.cheaper_fallback.name === "Composer 2.5" &&
+    uiCheap.prefer_cheaper &&
+    uiCheap.primary === "Claude Sonnet" &&
+    uiCheap.cheaper_fallback_slug === "composer-2.5-fast" &&
+    hard.prefer_cheaper &&
+    hard.primary === "GPT-5 Codex" &&
+    hard.cheaper_fallback.name === "Claude Sonnet" &&
+    hard.cheaper_fallback_slug === "claude-sonnet-5-thinking-high" &&
+    hard.reason.includes("Composer < Sonnet");
+  console.log(
+    `[${fbOk ? "OK" : "FAIL"}] cheaper_fallback ladder: bulk=${bulk.cheaper_fallback.name} ui=${uiCheap.primary} hard=${hard.cheaper_fallback_slug}`,
+  );
+  extraChecks += 1;
+  if (!fbOk) failed += 1;
 }
 
 // how_to_refresh_mcp

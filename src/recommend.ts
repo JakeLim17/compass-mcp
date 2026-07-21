@@ -1,6 +1,7 @@
 /**
- * ChronoCode model-selection.mdc 와 동일한 스코어링.
- * 출력 모델명: Composer 2.5 / Fable 5 / Grok 5.x / GPT-5 Codex
+ * ChronoCode model scoring SSOT.
+ * Claude ladder (approx cost): Composer < Sonnet < Opus < Fable/Codex
+ * Output names: Composer 2.5 / Claude Sonnet / Claude Opus / Fable 5 / Grok 5.x / GPT-5 Codex
  */
 import {
   hostModelId,
@@ -12,6 +13,8 @@ import { createHash, randomBytes } from "node:crypto";
 
 export type ModelId =
   | "Composer 2.5"
+  | "Claude Sonnet"
+  | "Claude Opus"
   | "Fable 5"
   | "Grok 5.x"
   | "GPT-5 Codex";
@@ -21,7 +24,7 @@ export type CostTier = "low" | "medium" | "medium-high" | "high";
 
 /**
  * Coarse model tier (docs / vibe-coding pick):
- * low = Composer · mid = Fable/Grok · high = Codex
+ * low = Composer · mid = Sonnet/Opus/Fable/Grok · high = Codex
  */
 export type ModelTier = "low" | "mid" | "high";
 
@@ -35,17 +38,33 @@ export interface UsageEstimate {
   ko: string;
 }
 
-/** Relative cost map (Composer cheapest → Codex heaviest) */
+/** Approx Claude family ladder (lowest → highest). Fable ≈ top Claude UI; Codex peers at top. */
+export const CLAUDE_COST_LADDER: ModelId[] = [
+  "Composer 2.5",
+  "Claude Sonnet",
+  "Claude Opus",
+  "Fable 5",
+  "GPT-5 Codex",
+];
+
+export const CLAUDE_LADDER_DOC =
+  "Composer < Sonnet < Opus < Fable/Codex (approx relative cost; Grok is design-mid, not on Claude ladder)";
+
+/** Relative cost map */
 export const COST_TIER: Record<ModelId, CostTier> = {
   "Composer 2.5": "low",
-  "Fable 5": "medium",
+  "Claude Sonnet": "medium",
+  "Claude Opus": "medium-high",
+  "Fable 5": "medium-high",
   "Grok 5.x": "medium-high",
   "GPT-5 Codex": "high",
 };
 
-/** Coarse tier aligned with COST_TIER (Fable+Grok both mid) */
+/** Coarse tier */
 export const MODEL_TIER: Record<ModelId, ModelTier> = {
   "Composer 2.5": "low",
+  "Claude Sonnet": "mid",
+  "Claude Opus": "mid",
   "Fable 5": "mid",
   "Grok 5.x": "mid",
   "GPT-5 Codex": "high",
@@ -53,12 +72,20 @@ export const MODEL_TIER: Record<ModelId, ModelTier> = {
 
 const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
   "Composer 2.5": {
-    en: "light daily loop — prefer for small patches",
-    ko: "가벼운 일상 루프 — 작은 수정에 적합",
+    en: "light daily loop — prefer for small patches / bulk mechanical",
+    ko: "가벼운 일상 루프 — 작은 수정·대량 기계 작업에 적합",
+  },
+  "Claude Sonnet": {
+    en: "cheaper Claude mid — quality without Fable/Codex burn",
+    ko: "저가 Claude mid — Fable/Codex보다 싸게 품질 유지",
+  },
+  "Claude Opus": {
+    en: "stronger Claude than Sonnet — still often cheaper/different from Fable",
+    ko: "Sonnet보다 강한 Claude — Fable과 다른 축·종종 더 저렴",
   },
   "Fable 5": {
-    en: "mid-weight multi-file / UI job",
-    ko: "중간 무게 멀티파일·UI 작업",
+    en: "mid-weight multi-file / UI job (Cursor high Claude)",
+    ko: "중간 무게 멀티파일·UI 작업 (Cursor 고가 Claude)",
   },
   "Grok 5.x": {
     en: "heavier design/reasoning — design only, then hand off",
@@ -81,11 +108,18 @@ export interface RecommendInput {
   project_config?: ProjectConfig;
   /** Optional light feedback score nudge (capped externally) */
   feedback_adjust?: Partial<Record<ModelId, number>>;
+  /**
+   * When usage alerts fired (high_tier_today / heavy_today), bias prefer_cheaper.
+   * Wired from getUsageSummary in server tools.
+   */
+  usage_prefer_cheaper?: boolean;
 }
 
 /** Cursor Task tool `model` 파라미터용 slug (UI 표시명과 별도) */
 export const CURSOR_TASK_SLUG: Record<ModelId, string> = {
   "Composer 2.5": "composer-2.5-fast",
+  "Claude Sonnet": "claude-sonnet-5-thinking-high",
+  "Claude Opus": "claude-opus-4-8-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
   "Grok 5.x": "cursor-grok-4.5-high-fast",
   "GPT-5 Codex": "gpt-5.6-sol-medium",
@@ -106,16 +140,26 @@ export function resolveModelId(raw?: string | null): ModelId | null {
   if (SLUG_TO_MODEL[s]) return SLUG_TO_MODEL[s];
   const lower = s.toLowerCase();
   if (lower.includes("composer")) return "Composer 2.5";
+  if (lower.includes("sonnet")) return "Claude Sonnet";
+  if (lower.includes("opus")) return "Claude Opus";
   if (lower.includes("fable")) return "Fable 5";
   if (lower.includes("grok")) return "Grok 5.x";
   if (lower.includes("codex") || lower.includes("gpt-5")) return "GPT-5 Codex";
   if (lower.startsWith("role:")) {
-    if (lower.includes("light")) return "Composer 2.5";
-    if (lower.includes("mid")) return "Fable 5";
+    if (lower.includes("light") || lower.includes("cheap")) return "Composer 2.5";
+    if (lower.includes("sonnet")) return "Claude Sonnet";
+    if (lower.includes("opus")) return "Claude Opus";
+    if (lower.includes("mid") || lower.includes("ui")) return "Fable 5";
     if (lower.includes("design")) return "Grok 5.x";
     if (lower.includes("heavy")) return "GPT-5 Codex";
   }
   return null;
+}
+
+export interface CheaperFallback {
+  name: ModelId;
+  slug: string;
+  tier: ModelTier;
 }
 
 export interface RecommendResult {
@@ -136,16 +180,22 @@ export interface RecommendResult {
   primary_cost_tier: CostTier;
   /** Relative cost/weight of alternative */
   alternative_cost_tier: CostTier;
-  /** Coarse tier: low=Composer mid=Fable/Grok high=Codex */
+  /** Coarse tier: low=Composer mid=Sonnet/Opus/Fable/Grok high=Codex */
   primary_tier: ModelTier;
   alternative_tier: ModelTier;
   /** Estimated token/context burn for this task */
   token_risk: TokenRisk;
   /**
-   * true when token_risk=high: bulk → cheaper primary already;
-   * hard bug → keep Codex but try Composer first for exploration
+   * true when token_risk=high, cost_bias cheap, or usage alerts:
+   * bulk → Composer; UI quality-cheap → Sonnet; hard bug → Codex + Sonnet fallback
    */
   prefer_cheaper: boolean;
+  /**
+   * Always present: step-down on Claude ladder (or Composer when already cheapest).
+   * Agents: when prefer_cheaper, prefer Task model=cheaper_fallback_slug (or Sonnet).
+   */
+  cheaper_fallback: CheaperFallback;
+  cheaper_fallback_slug: string;
   /** Short EN+KO hint about when this weight is worth it */
   usage_estimate: UsageEstimate;
   /** Idempotent-ish id for feedback_recommendation */
@@ -159,6 +209,8 @@ export interface RecommendResult {
 
 const MODELS: ModelId[] = [
   "Composer 2.5",
+  "Claude Sonnet",
+  "Claude Opus",
   "Fable 5",
   "Grok 5.x",
   "GPT-5 Codex",
@@ -167,17 +219,19 @@ const MODELS: ModelId[] = [
 /** 기본 비중 반영 베이스 점수 */
 const BASE: Record<ModelId, number> = {
   "Composer 2.5": 40,
+  "Claude Sonnet": 12,
+  "Claude Opus": 6,
   "Fable 5": 15,
   "Grok 5.x": 8,
   "GPT-5 Codex": 5,
 };
 
 const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
-  ui: { "Fable 5": 35, "Composer 2.5": 5 },
+  ui: { "Fable 5": 35, "Claude Sonnet": 8, "Composer 2.5": 5 },
   // Codex must beat Composer BASE(40) even without keyword matches
-  bug: { "GPT-5 Codex": 50, "Composer 2.5": 5 },
-  architecture: { "Grok 5.x": 45, "Fable 5": 10 },
-  test: { "GPT-5 Codex": 50, "Composer 2.5": 5 },
+  bug: { "GPT-5 Codex": 50, "Claude Sonnet": 8, "Composer 2.5": 5 },
+  architecture: { "Grok 5.x": 45, "Fable 5": 10, "Claude Opus": 5 },
+  test: { "GPT-5 Codex": 50, "Claude Sonnet": 8, "Composer 2.5": 5 },
 };
 
 const KEYWORD_RULES: Array<{
@@ -186,19 +240,19 @@ const KEYWORD_RULES: Array<{
 }> = [
   {
     re: /ui|ux|디자인|화면|레이아웃|프론트|css|스타일|컴포넌트|랜딩|히어로/i,
-    boost: { "Fable 5": 25, "Composer 2.5": 5 },
+    boost: { "Fable 5": 25, "Claude Sonnet": 6, "Composer 2.5": 5 },
   },
   {
     re: /리팩터|리팩토링|멀티\s*파일|넓은|대규모|코드베이스|아키텍처\s*이해/i,
-    boost: { "Fable 5": 30, "Composer 2.5": 5 },
+    boost: { "Fable 5": 30, "Claude Sonnet": 8, "Composer 2.5": 5 },
   },
   {
     re: /설계|구조|아키텍처|기술\s*선택|어떻게\s*짤|기획|트레이드.?오프|의사결정/i,
-    boost: { "Grok 5.x": 40, "Fable 5": 8 },
+    boost: { "Grok 5.x": 40, "Fable 5": 8, "Claude Opus": 5 },
   },
   {
     re: /ci\s*실패|테스트\s*설계|재현|난해|플레?이키|디버그|버그|회귀|타입\s*에러/i,
-    boost: { "GPT-5 Codex": 35, "Composer 2.5": 10 },
+    boost: { "GPT-5 Codex": 35, "Claude Sonnet": 8, "Composer 2.5": 10 },
   },
   {
     re: /i18n|문구|카피|한\s*줄|타이포|주석|lint|작은|퀵|핫픽스|문구\s*수정/i,
@@ -206,7 +260,7 @@ const KEYWORD_RULES: Array<{
   },
   {
     re: /기능\s*추가|버그픽스|패치|루프|일상|가성비/i,
-    boost: { "Composer 2.5": 20 },
+    boost: { "Composer 2.5": 20, "Claude Sonnet": 5 },
   },
 ];
 
@@ -240,6 +294,9 @@ const HARD_BUG_RE =
 const BULK_MECHANICAL_RE =
   /리팩터|리팩토링|refactor|migrate|마이그레이션|bulk|대량|일괄|generate|생성|rename|리네임|전체|many\s*files|코드베이스|대규모/i;
 
+const UI_TASK_RE =
+  /ui|ux|디자인|화면|레이아웃|프론트|css|스타일|컴포넌트|랜딩|히어로/i;
+
 /** Estimate token/context burn from description (+ tags as weak hints) */
 export function estimateTokenRisk(
   text: string,
@@ -248,7 +305,6 @@ export function estimateTokenRisk(
   const t = text ?? "";
   if (HIGH_TOKEN_RE.test(t)) return "high";
   if (LOW_TOKEN_RE.test(t)) return "low";
-  // architecture alone is not high — medium default
   void tags;
   return "medium";
 }
@@ -265,6 +321,52 @@ function isBulkMechanical(text: string): boolean {
   return BULK_MECHANICAL_RE.test(text);
 }
 
+function isUiTask(text: string, tags: Tag[]): boolean {
+  return tags.includes("ui") || UI_TASK_RE.test(text);
+}
+
+function isCheapBias(cfg?: ProjectConfig): boolean {
+  const b = cfg?.cost_bias;
+  return (
+    b === "prefer_cheaper" ||
+    b === "prefer_cheap" ||
+    b === "cheap"
+  );
+}
+
+/**
+ * Step down one rung on the Claude ladder (approx).
+ * Hard-bug / Codex / Fable / Opus / Grok → Sonnet first (explore / quality-cheap).
+ * Sonnet → Composer. Composer → Composer (already cheapest).
+ */
+export function pickCheaperFallback(
+  primary: ModelId,
+  opts?: { hardBug?: boolean },
+): CheaperFallback {
+  let name: ModelId;
+  if (primary === "Composer 2.5") {
+    name = "Composer 2.5";
+  } else if (
+    primary === "GPT-5 Codex" ||
+    primary === "Fable 5" ||
+    primary === "Claude Opus" ||
+    primary === "Grok 5.x" ||
+    opts?.hardBug
+  ) {
+    // Hard bugs: explore Sonnet first, then Composer (agents may chain)
+    name = "Claude Sonnet";
+  } else if (primary === "Claude Sonnet") {
+    name = "Composer 2.5";
+  } else {
+    name = "Claude Sonnet";
+  }
+  return {
+    name,
+    slug: CURSOR_TASK_SLUG[name],
+    tier: MODEL_TIER[name],
+  };
+}
+
 function buildUsageEstimate(
   primary: ModelId,
   tokenRisk: TokenRisk,
@@ -272,23 +374,26 @@ function buildUsageEstimate(
   hardBug: boolean,
 ): UsageEstimate {
   const base = USAGE_ESTIMATE[primary];
-  if (tokenRisk !== "high") return { ...base };
+  if (!preferCheaper && tokenRisk !== "high") return { ...base };
   if (hardBug && preferCheaper) {
     return {
-      en: `${base.en} · high token risk — try Composer first for exploration, then Codex`,
-      ko: `${base.ko} · 토큰 위험 높음 — 탐색은 Composer 먼저, 막히면 Codex`,
+      en: `${base.en} · prefer_cheaper — explore with Sonnet first, then Composer; Codex if still stuck`,
+      ko: `${base.ko} · prefer_cheaper — 탐색은 Sonnet 먼저, 그다음 Composer; 막히면 Codex`,
     };
   }
   if (preferCheaper) {
     return {
-      en: `${base.en} · high token risk — cheaper primary for bulk/mechanical work`,
-      ko: `${base.ko} · 토큰 위험 높음 — 대량·기계적 작업은 저가 모델 우선`,
+      en: `${base.en} · prefer_cheaper — Composer (bulk) or Sonnet (quality-cheap); ladder ${CLAUDE_LADDER_DOC}`,
+      ko: `${base.ko} · prefer_cheaper — 대량은 Composer, 품질 유지 저가는 Sonnet; 사다리 ${CLAUDE_LADDER_DOC}`,
     };
   }
-  return {
-    en: `${base.en} · high token risk`,
-    ko: `${base.ko} · 토큰 위험 높음`,
-  };
+  if (tokenRisk === "high") {
+    return {
+      en: `${base.en} · high token risk`,
+      ko: `${base.ko} · 토큰 위험 높음`,
+    };
+  }
+  return { ...base };
 }
 
 function buildReason(
@@ -299,27 +404,34 @@ function buildReason(
   tokenRisk: TokenRisk,
   preferCheaper: boolean,
   hardBug: boolean,
+  fallback: CheaperFallback,
 ): string {
   const tagHint = tags.length ? `태그(${tags.join(", ")})` : "문맥 키워드";
   const hints: Record<ModelId, string> = {
-    "Composer 2.5": "일상 루프·작은 수정·가성비에 맞음",
-    "Fable 5": "UI/넓은 범위·멀티파일 이해에 맞음",
-    "Grok 5.x": "구조·설계 추론에 맞음(구현은 Composer/Fable로)",
-    "GPT-5 Codex": "CI·난해한 버그·테스트 설계에 맞음",
+    "Composer 2.5": "일상 루프·작은 수정·대량 기계·가성비",
+    "Claude Sonnet": "저가 Claude mid — Fable/Codex 대체 품질",
+    "Claude Opus": "Sonnet보다 강한 Claude mid-high",
+    "Fable 5": "UI/넓은 범위·멀티파일 이해(고가 Claude UI)",
+    "Grok 5.x": "구조·설계 추론(구현은 Composer/Sonnet/Fable로)",
+    "GPT-5 Codex": "CI·난해한 버그·테스트 설계",
   };
   const short =
     text.trim().length > 80 ? `${text.trim().slice(0, 80)}…` : text.trim();
   let extra = "";
-  if (tokenRisk === "high" && hardBug && preferCheaper) {
-    extra =
-      " token_risk=high(난해 버그): Codex primary 유지, 탐색·로그 훑기는 Composer 먼저(prefer_cheaper).";
-  } else if (tokenRisk === "high" && preferCheaper) {
-    extra =
-      " token_risk=high(대량·기계적): 저가 tier(Composer) primary — 토큰 절약.";
+  if (preferCheaper && hardBug) {
+    extra = ` prefer_cheaper(난해 버그): Codex primary 유지, cheaper_fallback=${fallback.name}(탐색 먼저) → Composer. 사다리: ${CLAUDE_LADDER_DOC}.`;
+  } else if (preferCheaper && primary === "Composer 2.5") {
+    extra = ` prefer_cheaper(대량·기계적): Composer primary — 토큰 절약. cheaper_fallback=${fallback.name}. 사다리: ${CLAUDE_LADDER_DOC}.`;
+  } else if (preferCheaper && primary === "Claude Sonnet") {
+    extra = ` prefer_cheaper(품질 유지 저가): Sonnet primary(Fable/Codex 대신). cheaper_fallback=${fallback.name}. 사다리: ${CLAUDE_LADDER_DOC}.`;
+  } else if (preferCheaper) {
+    extra = ` prefer_cheaper: cheaper_fallback=${fallback.name}(${fallback.slug}). 사다리: ${CLAUDE_LADDER_DOC}.`;
   } else if (tokenRisk === "low") {
     extra = " token_risk=low: 품질 우선 스코어링 유지.";
+  } else {
+    extra = ` cheaper_fallback=${fallback.name} (사다리: ${CLAUDE_LADDER_DOC}).`;
   }
-  return `${tagHint} 기준 → 추천 ${primary}(${hints[primary]}, tier=${MODEL_TIER[primary]}). 대안 ${alternative}(${hints[alternative]}, tier=${MODEL_TIER[alternative]}).${extra} 과제: 「${short || "(설명 없음)"}」. 채팅 UI 모델은 자동 전환되지 않으니 host의 primary_id(또는 Cursor면 primary_slug)로 맞출 것.`;
+  return `${tagHint} 기준 → 추천 ${primary}(${hints[primary]}, tier=${MODEL_TIER[primary]}). 대안 ${alternative}(${hints[alternative]}, tier=${MODEL_TIER[alternative]}).${extra} 과제: 「${short || "(설명 없음)"}」. 채팅 UI 모델은 자동 전환되지 않으니 host의 primary_id(또는 Cursor면 primary_slug / cheaper_fallback_slug)로 맞출 것.`;
 }
 
 function applyProjectConfig(
@@ -328,19 +440,25 @@ function applyProjectConfig(
 ): void {
   if (!cfg) return;
   const bias = cfg.cost_bias;
-  if (bias === "prefer_cheaper" || bias === "prefer_cheap") {
+  if (isCheapBias(cfg)) {
     scores["Composer 2.5"] += 12;
+    scores["Claude Sonnet"] += 10;
     scores["GPT-5 Codex"] -= 6;
     scores["Grok 5.x"] -= 4;
+    scores["Fable 5"] -= 4;
   } else if (bias === "quality" || bias === "prefer_quality") {
     scores["GPT-5 Codex"] += 8;
     scores["Grok 5.x"] += 6;
     scores["Fable 5"] += 4;
+    scores["Claude Opus"] += 4;
   }
   if (cfg.default_tier === "low") {
     scores["Composer 2.5"] += 8;
+    scores["Claude Sonnet"] += 4;
   } else if (cfg.default_tier === "mid") {
     scores["Fable 5"] += 6;
+    scores["Claude Sonnet"] += 4;
+    scores["Claude Opus"] += 3;
     scores["Grok 5.x"] += 4;
   } else if (cfg.default_tier === "high") {
     scores["GPT-5 Codex"] += 8;
@@ -397,6 +515,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const host = resolveHostId(hostRaw);
   const token_risk = estimateTokenRisk(text, tags);
   const hardBug = isHardBugTask(text, tags);
+  const uiTask = isUiTask(text, tags);
   const scores: Record<ModelId, number> = { ...BASE };
 
   for (const tag of tags) {
@@ -407,15 +526,29 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     if (rule.re.test(text)) addScores(scores, rule.boost);
   }
 
-  // 아키텍처 태그는 구현 전체 Grok 고정 방지: 대안이 Composer/Fable이 되게
+  // 아키텍처 태그는 구현 전체 Grok 고정 방지: 대안이 Composer/Sonnet/Fable이 되게
   if (tags.includes("architecture") && !tags.includes("ui")) {
     scores["Composer 2.5"] += 5;
+    scores["Claude Sonnet"] += 3;
   }
 
-  // high + bulk/mechanical (not hard bug): boost cheaper before ranking
-  if (token_risk === "high" && !hardBug && isBulkMechanical(text)) {
+  const prefer_cheaper =
+    token_risk === "high" ||
+    isCheapBias(cfg) ||
+    !!input.usage_prefer_cheaper;
+
+  // high + bulk/mechanical (not hard bug, not UI): boost cheaper before ranking
+  if (prefer_cheaper && !hardBug && !uiTask && isBulkMechanical(text)) {
     scores["Composer 2.5"] += 55;
     scores["GPT-5 Codex"] -= 20;
+    scores["Fable 5"] -= 10;
+  }
+
+  // prefer_cheaper + UI (not hard bug): boost Sonnet as quality-cheap vs Fable
+  if (prefer_cheaper && uiTask && !hardBug) {
+    scores["Claude Sonnet"] += 40;
+    scores["Fable 5"] -= 25;
+    scores["Composer 2.5"] += 8;
   }
 
   applyProjectConfig(scores, cfg);
@@ -430,11 +563,19 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   }
 
   let [primary, alternative] = topTwo(scores);
-  let prefer_cheaper = false;
 
-  if (token_risk === "high") {
-    prefer_cheaper = true;
-    if (!hardBug && isBulkMechanical(text)) {
+  if (prefer_cheaper) {
+    // UI quality-cheap first (Sonnet over Fable); bulk mechanical → Composer
+    if (uiTask && !hardBug) {
+      const qualityCheap: ModelId =
+        scores["Composer 2.5"] >= scores["Claude Sonnet"] + 20
+          ? "Composer 2.5"
+          : "Claude Sonnet";
+      if (primary !== qualityCheap) {
+        alternative = primary;
+        primary = qualityCheap;
+      }
+    } else if (!hardBug && isBulkMechanical(text)) {
       const cheap: ModelId = "Composer 2.5";
       if (primary !== cheap) {
         alternative = primary;
@@ -447,6 +588,9 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   }
 
   [primary, alternative] = ensureNotBlocked(primary, alternative, scores, cfg);
+
+  const cheaper_fallback = pickCheaperFallback(primary, { hardBug });
+  const cheaper_fallback_slug = cheaper_fallback.slug;
 
   const currentResolved =
     resolveModelId(input.current_model) ??
@@ -466,6 +610,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     token_risk,
     prefer_cheaper,
     hardBug,
+    cheaper_fallback,
   );
   if (stick_action === "keep") {
     reason = `sticky 유지: 현재 ${currentResolved} = 추천 primary. ${reason}`;
@@ -474,6 +619,9 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   }
   if (cfg?.cost_bias && cfg.cost_bias !== "balanced") {
     reason += ` project cost_bias=${cfg.cost_bias}.`;
+  }
+  if (input.usage_prefer_cheaper) {
+    reason += " usage alerts → prefer_cheaper.";
   }
 
   const recommendation_id = makeRecommendationId(text, primary, alternative);
@@ -494,6 +642,8 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     alternative_tier: MODEL_TIER[alternative],
     token_risk,
     prefer_cheaper,
+    cheaper_fallback,
+    cheaper_fallback_slug,
     usage_estimate: buildUsageEstimate(
       primary,
       token_risk,
