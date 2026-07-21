@@ -50,14 +50,16 @@ We only recommend models Cursor can run. If missing/blocked → **next on the la
 | Tool | What |
 |------|------|
 | `start_session` | sticky + alert codes + optional recommend (**no weekly essay** unless `include_report` / `verbose`) |
-| `recommend_model` | Short JSON: primary, slugs, `cheaper_fallback_slug`, `fallback_chain`, one-line `reason` |
+| `recommend_model` | Short JSON: primary, slugs, `cost_preview` (weight/relative/advice), `cheaper_fallback_slug`, `fallback_chain`, one-line `reason` |
 | `get_usage_summary` | Counts + alerts; full report when `verbose` or `locale` |
 | `get_sticky` / `set_sticky` / … | Adopted model |
 | `list_hosts` / `list_example_prompts` | Compact maps |
 
 Pass `verbose: true` only when debugging.
 
-**Reading the recommendation:** `primary` / `for_task` = the model that fits **your task**. The agent or Task worker that **called** this MCP (e.g. Composer) may be different — see `clarity.ko` / `honest_limit.ko` in every `recommend_model` response. This MCP does **not** auto-switch the Cursor chat dropdown.
+**Reading the recommendation:** `primary` / `for_task` = the model that fits **your task**. The agent or Task worker that **called** this MCP (e.g. Composer) may be different — see `clarity.ko` / `cost_preview.advice.ko` in every `recommend_model` response. This MCP does **not** auto-switch the Cursor chat dropdown.
+
+**Cost hints (`cost_preview`):** relative weight only (light / medium / heavy, Composer ≈1× ladder) — **not** billing, token counts, or Cursor balance. Routing heuristic from keywords/scores; good for light↔heavy direction, not exact spend.
 
 **Agents:** sticky `keep` → do not re-call every trivial message. Prefer Task `model` = `cheaper_fallback_slug` when `prefer_cheaper`; if unavailable → next in `fallback_chain`.
 

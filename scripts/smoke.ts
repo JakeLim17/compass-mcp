@@ -12,7 +12,9 @@ import {
   CURSOR_AGENT_CATALOG,
   MODEL_TIER,
   analyzeCommand,
+  buildCostPreview,
   compactRecommendResult,
+  costTierToWeight,
   recommendModel,
   type CostTier,
   type TokenRisk,
@@ -298,6 +300,13 @@ for (const ex of EXAMPLE_PROMPTS) {
   const c = compactRecommendResult(r);
   const clarity = c.clarity as { ko?: string; en?: string } | undefined;
   const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
+  const costPreview = c.cost_preview as
+    | {
+        weight?: string;
+        relative?: { ko?: string; en?: string };
+        advice?: { ko?: string; en?: string };
+      }
+    | undefined;
   const forTask = c.for_task as
     | { primary?: string; primary_id?: string; cost_tier?: string }
     | undefined;
@@ -309,13 +318,40 @@ for (const ex of EXAMPLE_PROMPTS) {
     forTask?.cost_tier === r.primary_cost_tier &&
     !!clarity?.ko &&
     clarity.ko.includes("작업용 추천") &&
+    clarity.ko.includes("충분") &&
     !!clarity?.en &&
     !!honest?.ko &&
     honest.ko.includes("자동 전환") &&
     !!honest?.en &&
+    costPreview?.weight === "light" &&
+    !!costPreview?.relative?.ko &&
+    costPreview.relative.ko.includes("1×") &&
+    !!costPreview?.advice?.ko &&
+    costPreview.advice.ko.includes("Composer") &&
     !("scores" in c) &&
     !("usage_estimate" in c);
-  console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity fields`);
+  console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity + cost_preview`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+// cost_preview weight mapping + Codex heavy advice
+{
+  const tiny = recommendModel({ task_description: "i18n 한 줄" });
+  const bug = recommendModel({
+    task_description: "CI 실패 재현과 난해한 타입 에러",
+    tags: ["bug"],
+  });
+  const ok =
+    tiny.cost_preview.weight === "light" &&
+    costTierToWeight(tiny.primary_cost_tier) === "light" &&
+    bug.cost_preview.weight === "heavy" &&
+    bug.primary === "GPT-5 Codex" &&
+    !!bug.cost_preview.advice.ko &&
+    bug.cost_preview.relative.ko.includes("4–5×") &&
+    buildCostPreview("Composer 2.5", "low", analyzeCommand("한 줄"), true)
+      .advice.ko.includes("충분");
+  console.log(`[${ok ? "OK" : "FAIL"}] cost_preview weight + advice`);
   extraChecks += 1;
   if (!ok) failed += 1;
 }

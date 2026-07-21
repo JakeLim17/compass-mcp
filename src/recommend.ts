@@ -40,6 +40,16 @@ export interface UsageEstimate {
   ko: string;
 }
 
+/** Coarse weight for UI — light / medium / heavy (relative only, not $) */
+export type CostWeight = "light" | "medium" | "heavy";
+
+/** Relative cost preview — no token/dollar/balance numbers */
+export interface CostPreview {
+  weight: CostWeight;
+  relative: UsageEstimate;
+  advice: UsageEstimate;
+}
+
 /**
  * Cursor agent-usable Task `model` slugs (SSOT).
  * Never recommend a slug outside this list for host=cursor.
@@ -100,6 +110,23 @@ export const MODEL_TIER: Record<ModelId, ModelTier> = {
   "GPT-5 Sol": "mid",
   "GPT-5 Codex": "high",
 };
+
+/** Approximate relative burn vs Composer=1× — heuristic, not billing */
+const RELATIVE_COST: Record<ModelId, UsageEstimate> = {
+  "Composer 2.5": { ko: "Composer ≈1× (기준)", en: "Composer ≈1× (baseline)" },
+  "Claude Sonnet": { ko: "Sonnet ≈2×", en: "Sonnet ≈2×" },
+  "Claude Opus": { ko: "Opus ≈2–3×", en: "Opus ≈2–3×" },
+  "Fable 5": { ko: "Fable ≈2–3×", en: "Fable ≈2–3×" },
+  "Grok 5.x": { ko: "Grok ≈2–3× (설계)", en: "Grok ≈2–3× (design)" },
+  "GPT-5 Sol": { ko: "Sol ≈2–3×", en: "Sol ≈2–3×" },
+  "GPT-5 Codex": { ko: "Codex/Terra ≈4–5× (고비용)", en: "Codex/Terra ≈4–5× (high)" },
+};
+
+export function costTierToWeight(tier: CostTier): CostWeight {
+  if (tier === "low") return "light";
+  if (tier === "high") return "heavy";
+  return "medium";
+}
 
 const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
   "Composer 2.5": {
@@ -270,6 +297,8 @@ export interface RecommendResult {
   };
   /** One-line KO/EN: recommended model vs caller */
   clarity: UsageEstimate;
+  /** Relative weight/cost/advice — visible savings hint (no $/tokens) */
+  cost_preview: CostPreview;
   /** UI auto-switch off + runner may differ from recommendation */
   honest_limit: UsageEstimate;
 }
@@ -611,6 +640,94 @@ export function buildFallbackChain(
     .filter((s) => isCursorCatalogSlug(s));
 }
 
+function buildCostAdvice(
+  primary: ModelId,
+  signals: CommandSignals,
+  preferCheaper: boolean,
+): UsageEstimate {
+  const heavy = primary === "GPT-5 Codex" || primary === "Grok 5.x";
+  const light = primary === "Composer 2.5";
+  const midClaude =
+    primary === "Claude Sonnet" ||
+    primary === "Claude Opus" ||
+    primary === "Fable 5";
+
+  if (light && (signals.scope === "tiny" || signals.scope === "local")) {
+    return {
+      ko: "이 문장이면 Composer로 충분 — Codex·Fable은 과함",
+      en: "Composer fits this task — Codex/Fable would be overkill",
+    };
+  }
+  if (primary === "Claude Sonnet" && signals.ui && !signals.large_ui) {
+    return {
+      ko: "Sonnet 적합 — Fable·Codex는 넓은 UI·난해 버그 때만",
+      en: "Sonnet is a good fit — reserve Fable/Codex for large UI or hard bugs",
+    };
+  }
+  if (primary === "Fable 5") {
+    return {
+      ko: signals.large_ui
+        ? "넓은 UI엔 Fable 적합 — 작은 패치면 Composer로 절약"
+        : "Fable은 무거운 편 — 작은 수정이면 Composer/Sonnet 우선",
+      en: signals.large_ui
+        ? "Fable fits broad UI — use Composer for small patches"
+        : "Fable is heavier — prefer Composer/Sonnet for small edits",
+    };
+  }
+  if (primary === "Grok 5.x") {
+    return {
+      ko: "설계·트레이드오프용 — 구현은 Sonnet/Composer로 넘기세요",
+      en: "For design/tradeoffs — hand off implementation to Sonnet/Composer",
+    };
+  }
+  if (primary === "GPT-5 Codex") {
+    return signals.hard_bug
+      ? {
+          ko: "난해 버그·CI엔 Codex 정당 — 먼저 Sol/Sonnet 탐색 권장",
+          en: "Codex justified for hard bugs/CI — try Sol/Sonnet first",
+        }
+      : {
+          ko: "고비용 — 막힐 때만, 평소 Composer/Sonnet 우선",
+          en: "High cost — only when stuck; prefer Composer/Sonnet normally",
+        };
+  }
+  if (primary === "GPT-5 Sol") {
+    return {
+      ko: "Sol은 Codex보다 가벼움 — 막히면 그때 Codex",
+      en: "Sol is lighter than Codex — escalate to Codex only if stuck",
+    };
+  }
+  if (heavy && preferCheaper) {
+    return {
+      ko: "무거운 primary — cheaper_fallback 먼저 시도 권장",
+      en: "Heavy primary — try cheaper_fallback first",
+    };
+  }
+  if (midClaude && preferCheaper) {
+    return {
+      ko: `${primary} 적합 — 더 가볍게는 Composer/Sonnet`,
+      en: `${primary} fits — Composer/Sonnet if you want lighter`,
+    };
+  }
+  return {
+    ko: `${primary} 적합 — 상대 비용은 relative 참고`,
+    en: `${primary} fits — see relative for approximate cost`,
+  };
+}
+
+export function buildCostPreview(
+  primary: ModelId,
+  primaryCostTier: CostTier,
+  signals: CommandSignals,
+  preferCheaper: boolean,
+): CostPreview {
+  return {
+    weight: costTierToWeight(primaryCostTier),
+    relative: { ...RELATIVE_COST[primary] },
+    advice: buildCostAdvice(primary, signals, preferCheaper),
+  };
+}
+
 function buildUsageEstimate(
   primary: ModelId,
   tokenRisk: TokenRisk,
@@ -950,6 +1067,12 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       cost_tier: primary_cost_tier,
     },
     clarity: { ko: "", en: "" },
+    cost_preview: buildCostPreview(
+      primary,
+      primary_cost_tier,
+      signals,
+      prefer_cheaper,
+    ),
     honest_limit: { ko: "", en: "" },
     ...(stick_action
       ? {
@@ -970,9 +1093,16 @@ export function recommendModel(input: RecommendInput): RecommendResult {
 export function buildRecommendClarity(result: RecommendResult): {
   for_task: RecommendResult["for_task"];
   clarity: UsageEstimate;
+  cost_preview: CostPreview;
   honest_limit: UsageEstimate;
 } {
-  const { primary, primary_id, primary_cost_tier } = result;
+  const { primary, primary_id, primary_cost_tier, cost_preview } = result;
+  const weightKo =
+    cost_preview.weight === "light"
+      ? "가벼움"
+      : cost_preview.weight === "heavy"
+        ? "무거움"
+        : "보통";
   return {
     for_task: {
       primary,
@@ -980,9 +1110,10 @@ export function buildRecommendClarity(result: RecommendResult): {
       cost_tier: primary_cost_tier,
     },
     clarity: {
-      ko: `작업용 추천: ${primary} (${primary_id}). 이 MCP를 호출한 채팅/워커 모델과는 별개입니다.`,
-      en: `Task recommendation: ${primary} (${primary_id}). Separate from the chat/worker model that invoked this MCP.`,
+      ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}). ${cost_preview.advice.ko} — MCP 호출 모델과 별개.`,
+      en: `Task recommendation: ${primary} (${primary_id}, ${cost_preview.weight}). ${cost_preview.advice.en} — separate from MCP caller.`,
     },
+    cost_preview,
     honest_limit: {
       ko: "Cursor UI 모델은 자동 전환되지 않습니다. MCP를 호출한 에이전트/워커(예: Composer)와 작업용 추천(primary)은 다를 수 있습니다.",
       en: "Cursor does not auto-switch the chat model. The agent/worker that called this MCP (e.g. Composer) may differ from the task recommendation (primary).",
@@ -994,12 +1125,14 @@ export function buildRecommendClarity(result: RecommendResult): {
 export function compactRecommendResult(
   result: RecommendResult,
 ): Record<string, unknown> {
-  const { for_task, clarity, honest_limit } = buildRecommendClarity(result);
+  const { for_task, clarity, cost_preview, honest_limit } =
+    buildRecommendClarity(result);
   return {
     primary: result.primary,
     alternative: result.alternative,
     for_task,
     clarity,
+    cost_preview,
     honest_limit,
     primary_slug: result.primary_slug,
     primary_id: result.primary_id,

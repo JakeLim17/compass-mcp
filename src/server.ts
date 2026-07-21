@@ -27,7 +27,7 @@ import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.5.0";
+const SERVER_VERSION = "0.5.1";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -146,7 +146,7 @@ function buildStartSessionPayload(input: {
         by_tier: usage.by_tier,
       },
       recommend,
-      tip: "Agents: summarize clarity.ko + reason; don’t paste MCP dumps. primary/for_task ≠ caller model.",
+      tip: "Agents: summarize clarity.ko + cost_preview.advice.ko; don’t paste MCP dumps. primary/for_task ≠ caller model.",
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
       ...(includeReport
         ? {
