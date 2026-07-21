@@ -57,6 +57,8 @@ We only recommend models Cursor can run. If missing/blocked → **next on the la
 
 Pass `verbose: true` only when debugging.
 
+**Reading the recommendation:** `primary` / `for_task` = the model that fits **your task**. The agent or Task worker that **called** this MCP (e.g. Composer) may be different — see `clarity.ko` / `honest_limit.ko` in every `recommend_model` response. This MCP does **not** auto-switch the Cursor chat dropdown.
+
 **Agents:** sticky `keep` → do not re-call every trivial message. Prefer Task `model` = `cheaper_fallback_slug` when `prefer_cheaper`; if unavailable → next in `fallback_chain`.
 
 ---
@@ -126,6 +128,7 @@ npm run build
 ## Limits
 
 - Chat UI dropdown does not auto-switch  
+- **`primary` / `for_task` ≠ the model running the MCP call** — e.g. Composer may call `recommend_model` and get Fable as the task pick  
 - Cost/token_risk are relative, not dollars  
 - Claude/OpenAI host ids are approximate (`src/hosts.ts`)
 

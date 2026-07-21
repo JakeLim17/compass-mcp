@@ -146,7 +146,7 @@ function buildStartSessionPayload(input: {
         by_tier: usage.by_tier,
       },
       recommend,
-      tip: "Agents: summarize 2 lines; don’t paste MCP dumps. sticky keep → skip re-recommend.",
+      tip: "Agents: summarize clarity.ko + reason; don’t paste MCP dumps. primary/for_task ≠ caller model.",
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
       ...(includeReport
         ? {
@@ -383,6 +383,9 @@ server.tool(
       : EXAMPLE_PROMPTS;
     if (!verbose) {
       return jsonToolResult({
+        meta: {
+          reading: EXAMPLE_PROMPTS_META.reading_recommendation,
+        },
         prompts: list.map((e) => ({
           category: e.category,
           ko: e.ko,

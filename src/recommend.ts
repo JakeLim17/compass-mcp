@@ -262,6 +262,16 @@ export interface RecommendResult {
   current_resolved?: ModelId | null;
   /** When keep: soft hint to stay quiet */
   sticky_suggest?: "keep_silent";
+  /** Task recommendation — distinct from the agent that called this MCP */
+  for_task: {
+    primary: ModelId;
+    primary_id: string;
+    cost_tier: CostTier;
+  };
+  /** One-line KO/EN: recommended model vs caller */
+  clarity: UsageEstimate;
+  /** UI auto-switch off + runner may differ from recommendation */
+  honest_limit: UsageEstimate;
 }
 
 const MODELS: ModelId[] = [
@@ -904,7 +914,10 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const alternative_slug =
     catalogSlugOrNull(CURSOR_TASK_SLUG[alternative]) ?? "composer-2.5-fast";
 
-  return {
+  const primary_id = hostModelId(host, primary);
+  const primary_cost_tier = COST_TIER[primary];
+
+  const base: RecommendResult = {
     primary,
     alternative,
     reason,
@@ -912,9 +925,9 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     primary_slug,
     alternative_slug,
     host,
-    primary_id: hostModelId(host, primary),
+    primary_id,
     alternative_id: hostModelId(host, alternative),
-    primary_cost_tier: COST_TIER[primary],
+    primary_cost_tier,
     alternative_cost_tier: COST_TIER[alternative],
     primary_tier: MODEL_TIER[primary],
     alternative_tier: MODEL_TIER[alternative],
@@ -931,6 +944,13 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       hardBug,
     ),
     recommendation_id,
+    for_task: {
+      primary,
+      primary_id,
+      cost_tier: primary_cost_tier,
+    },
+    clarity: { ko: "", en: "" },
+    honest_limit: { ko: "", en: "" },
     ...(stick_action
       ? {
           stick_action,
@@ -941,15 +961,46 @@ export function recommendModel(input: RecommendInput): RecommendResult {
         }
       : {}),
   };
+
+  const { clarity, honest_limit } = buildRecommendClarity(base);
+  return { ...base, clarity, honest_limit };
+}
+
+/** One-line clarity: task recommendation ≠ MCP caller model */
+export function buildRecommendClarity(result: RecommendResult): {
+  for_task: RecommendResult["for_task"];
+  clarity: UsageEstimate;
+  honest_limit: UsageEstimate;
+} {
+  const { primary, primary_id, primary_cost_tier } = result;
+  return {
+    for_task: {
+      primary,
+      primary_id,
+      cost_tier: primary_cost_tier,
+    },
+    clarity: {
+      ko: `작업용 추천: ${primary} (${primary_id}). 이 MCP를 호출한 채팅/워커 모델과는 별개입니다.`,
+      en: `Task recommendation: ${primary} (${primary_id}). Separate from the chat/worker model that invoked this MCP.`,
+    },
+    honest_limit: {
+      ko: "Cursor UI 모델은 자동 전환되지 않습니다. MCP를 호출한 에이전트/워커(예: Composer)와 작업용 추천(primary)은 다를 수 있습니다.",
+      en: "Cursor does not auto-switch the chat model. The agent/worker that called this MCP (e.g. Composer) may differ from the task recommendation (primary).",
+    },
+  };
 }
 
 /** Compact tool payload — default for agents (token-light) */
 export function compactRecommendResult(
   result: RecommendResult,
 ): Record<string, unknown> {
+  const { for_task, clarity, honest_limit } = buildRecommendClarity(result);
   return {
     primary: result.primary,
     alternative: result.alternative,
+    for_task,
+    clarity,
+    honest_limit,
     primary_slug: result.primary_slug,
     primary_id: result.primary_id,
     cheaper_fallback_slug: result.cheaper_fallback_slug,

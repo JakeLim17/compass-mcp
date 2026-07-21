@@ -109,8 +109,10 @@ export const EXAMPLE_PROMPTS_META = {
     "Same context = keep adopted model (no re-ask). Context / task-type change = call recommend_model again and present primary + alternative on switch.",
   save_vs_quality:
     "Save/cheap default may map normal UI to Sonnet; quality expect (cost_bias quality / premium wording / large redesign) may escalate the same UI work to Fable. Document both honestly — do not claim Fable as the cheap primary.",
+  reading_recommendation:
+    "primary / for_task = task recommendation only. The agent or Task worker that called this MCP (e.g. Composer) may differ — check clarity.ko in recommend_model.",
   honest_limit:
-    "This MCP does not auto-switch the Cursor chat UI model. You still pick the chat model or pass a Task model slug.",
+    "This MCP does not auto-switch the Cursor chat UI model. The runner that invoked the tool may differ from the task recommendation (primary / for_task). You still pick the chat model or pass a Task model slug.",
   categories: [
     "ui",
     "bug",

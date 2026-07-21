@@ -296,12 +296,26 @@ for (const ex of EXAMPLE_PROMPTS) {
 {
   const r = recommendModel({ task_description: "i18n 한 줄" });
   const c = compactRecommendResult(r);
+  const clarity = c.clarity as { ko?: string; en?: string } | undefined;
+  const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
+  const forTask = c.for_task as
+    | { primary?: string; primary_id?: string; cost_tier?: string }
+    | undefined;
   const ok =
     !!c.primary &&
     !!c.cheaper_fallback_slug &&
+    forTask?.primary === r.primary &&
+    forTask?.primary_id === r.primary_id &&
+    forTask?.cost_tier === r.primary_cost_tier &&
+    !!clarity?.ko &&
+    clarity.ko.includes("작업용 추천") &&
+    !!clarity?.en &&
+    !!honest?.ko &&
+    honest.ko.includes("자동 전환") &&
+    !!honest?.en &&
     !("scores" in c) &&
     !("usage_estimate" in c);
-  console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult`);
+  console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity fields`);
   extraChecks += 1;
   if (!ok) failed += 1;
 }
