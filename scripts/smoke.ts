@@ -26,6 +26,7 @@ import {
   mcpRefreshSessionHint,
 } from "../src/refreshHelp.ts";
 import { getUsageSummary, logModelUsage } from "../src/usage.ts";
+import { getVersionInfo, buildUpdateHint } from "../src/version.ts";
 
 type Case = {
   name: string;
@@ -378,6 +379,10 @@ for (const ex of EXAMPLE_PROMPTS) {
     costPreview.relative.ko.includes("1×") &&
     !!costPreview?.advice?.ko &&
     costPreview.advice.ko.includes("Composer") &&
+    !!(c.run_hint as { ko?: string; task_model?: string })?.ko?.includes(
+      r.primary_id,
+    ) &&
+    !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
     !("scores" in c) &&
     !("usage_estimate" in c);
   console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity + cost_preview`);
@@ -588,6 +593,19 @@ try {
   console.log(`[${refreshOk ? "OK" : "FAIL"}] how_to_refresh_mcp`);
   extraChecks += 1;
   if (!refreshOk) failed += 1;
+}
+
+{
+  const v = getVersionInfo({ skip_fetch: true });
+  const hint = buildUpdateHint(v, "ko");
+  const ok =
+    v.version === "0.7.0" &&
+    v.name === "compass-mcp" &&
+    !!hint.message &&
+    EXPECTED_TOOL_NAMES.includes("check_update");
+  console.log(`[${ok ? "OK" : "FAIL"}] check_update version=${v.version}`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
 }
 
 const total = cases.length + EXAMPLE_PROMPTS.length + extraChecks;

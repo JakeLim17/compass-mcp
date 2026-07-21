@@ -1358,12 +1358,37 @@ export function buildRecommendClarity(result: RecommendResult): {
   };
 }
 
+/** Task worker hint — always use primary_id unless host says unavailable */
+export function buildRunHint(result: RecommendResult): {
+  ko: string;
+  en: string;
+  task_model: string;
+  fallback_model: string;
+} {
+  const fb =
+    result.candidates[1]?.id ??
+    result.candidates[1]?.slug ??
+    result.cheaper_fallback_slug;
+  return {
+    task_model: result.primary_id,
+    fallback_model: fb,
+    ko: `다음 Task model=${result.primary_id} (불가 시 ${fb}) → log_model_usage → set_sticky`,
+    en: `Next Task model=${result.primary_id} (if unavailable ${fb}) → log_model_usage → set_sticky`,
+  };
+}
+
+const AGENT_NOTE = {
+  ko: "실제 작업(Task/subagent)은 primary_id로 실행. MCP 호출 모델(예: Composer)과 다를 수 있음. unavailable → candidates[1].id. 주인님껀 sticky 단어 금지 — model_persistence 사용.",
+  en: "Run real work (Task/subagent) with primary_id — may differ from MCP caller. If unavailable → candidates[1].id. Never say sticky to user — use model_persistence.",
+} as const;
+
 /** Compact tool payload — default for agents (token-light) */
 export function compactRecommendResult(
   result: RecommendResult,
 ): Record<string, unknown> {
   const { for_task, clarity, cost_preview, honest_limit } =
     buildRecommendClarity(result);
+  const run_hint = buildRunHint(result);
   return {
     primary: result.primary,
     alternative: result.alternative,
@@ -1381,13 +1406,13 @@ export function compactRecommendResult(
     reason: result.reason,
     host: result.host,
     recommendation_id: result.recommendation_id,
+    run_hint,
+    agent_note: AGENT_NOTE,
     ...(result.stick_action
       ? {
           stick_action: result.stick_action,
           model_persistence: result.model_persistence,
           sticky_suggest: result.sticky_suggest,
-          agent_note:
-            "주인님 보고 시 sticky 단어 쓰지 말 것 — model_persistence 문장 사용",
         }
       : {}),
   };

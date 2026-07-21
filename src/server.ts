@@ -25,9 +25,10 @@ import {
 } from "./refreshHelp.js";
 import { clearSticky, getSticky, setSticky } from "./sticky.js";
 import { getUsageSummary, logModelUsage } from "./usage.js";
+import { buildUpdateHint, getVersionInfo } from "./version.js";
 
 const SERVER_NAME = "compass-mcp";
-const SERVER_VERSION = "0.6.1";
+const SERVER_VERSION = "0.7.0";
 const refreshHostSchema = z
   .enum(["cursor", "claude", "openai", "vscode", "generic"])
   .optional();
@@ -135,11 +136,17 @@ function buildStartSessionPayload(input: {
       : compactRecommendResult(result);
   }
 
+  const versionInfo = getVersionInfo({ skip_fetch: true });
+  const updateHint = buildUpdateHint(versionInfo, input.locale ?? "ko");
+
   if (!verbose) {
     return {
+      version: SERVER_VERSION,
+      update: updateHint,
       adopted_model: stickyRes.sticky?.adopted_model ?? null,
       stick_action: recommend?.stick_action,
       model_persistence: recommend?.model_persistence,
+      run_hint: recommend?.run_hint ?? null,
       alerts: usage.alerts.map((a) => a.code),
       usage: {
         period: usage.period,
@@ -147,7 +154,7 @@ function buildStartSessionPayload(input: {
         by_tier: usage.by_tier,
       },
       recommend,
-      tip: "Agents: summarize clarity.ko + cost_preview.advice.ko; don’t paste MCP dumps. primary/for_task ≠ caller model. 주인님 보고 시 sticky 단어 금지.",
+      tip: "Agents: summarize clarity.ko + run_hint.ko; don’t paste MCP dumps. Task model=primary_id. 주인님 보고 시 sticky 단어 금지.",
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
       ...(includeReport
         ? {
@@ -235,7 +242,7 @@ server.tool(
 
 server.tool(
   "recommend_model",
-  "명령 문장 정독 → 작업에 맞는 모델(과한 고가 모델 회피). compact JSON. verbose=true면 scores 등. catalog-only + fallback_chain.",
+  "명령 문장 정독 → 작업에 맞는 모델. compact JSON + run_hint(다음 Task model=primary_id). 에이전트: recommend 후 Task/subagent model=primary_id, log_model_usage, set_sticky. verbose=true면 scores.",
   {
     task_description: z.string().describe("할 일 문장 — 의도·범위·난이도 포함해서"),
     tags: z.array(tagSchema).optional().describe("ui | bug | architecture | test"),
@@ -330,8 +337,30 @@ server.tool(
 );
 
 server.tool(
+  "check_update",
+  "로컬 compass-mcp 버전 + (git 있으면) origin behind 힌트. stale 도구면 how_to_refresh_mcp.",
+  {
+    locale: localeSchema.optional(),
+    fetch_remote: z
+      .boolean()
+      .optional()
+      .describe("true면 git fetch 시도 (기본 false)"),
+  },
+  async ({ locale, fetch_remote }) => {
+    const info = getVersionInfo({ skip_fetch: !fetch_remote });
+    const hint = buildUpdateHint(info, locale ?? "ko");
+    return jsonToolResult({
+      ...info,
+      hint,
+      refresh: mcpRefreshSessionHint(),
+      sync: "npm run sync — pull + build + refresh reminder",
+    });
+  },
+);
+
+server.tool(
   "get_project_config",
-  "`.compass-mcp.json` 로드 (기본 cost_bias=cheap).",
+  "`.compass-mcp.json` 로드. cost_bias/blocked/unavailable → recommend_model 점수·후보에 반영.",
   {
     cwd: z.string().optional(),
     verbose: verboseSchema,

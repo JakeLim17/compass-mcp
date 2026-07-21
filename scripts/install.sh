@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> Compass MCP setup"
+VERSION="$(node -p "require('./package.json').version")"
+echo "==> Compass MCP setup v${VERSION}"
 echo "    path: $ROOT"
 echo ""
 
@@ -74,4 +75,6 @@ echo "     (Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle OFF/ON)"
 echo "  3) Prefer start_session at work start; or get_sticky → recommend_model → log_model_usage → set_sticky"
 echo ""
 echo "Data dir: ~/.cursor/compass-mcp/  (sticky.json, usage.jsonl, feedback.jsonl)"
+echo ""
+echo "Version: v${VERSION}  |  Update later: npm run sync  |  Stale tools: how_to_refresh_mcp"
 echo "Done."

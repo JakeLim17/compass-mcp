@@ -1,4 +1,5 @@
 {
+  "$schema_note": "Copy to project root as .compass-mcp.json — soft prefs only; scoring SSOT is recommend_model.",
   "preferred_host": "cursor",
   "default_tier": "low",
   "blocked_models": [],
@@ -7,5 +8,13 @@
   "usage_alert_thresholds": {
     "high_tier_today": 3,
     "heavy_today": 8
+  },
+  "_field_guide": {
+    "preferred_host": "cursor | claude | openai | generic — host-mapped primary_id",
+    "default_tier": "low | mid | high — soft score nudge when flat",
+    "blocked_models": "Never pick as primary (-200 score). Display names or slugs.",
+    "unavailable_models": "Same as blocked — skip + next on fallback_chain",
+    "cost_bias": "unset=cheap. quality | prefer_quality = premium OK. cheap | prefer_cheaper = save tokens",
+    "usage_alert_thresholds": "high_tier_today (Codex), heavy_today (mid+high) → prefer_cheaper in recommend"
   }
 }

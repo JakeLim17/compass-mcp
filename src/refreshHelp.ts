@@ -26,6 +26,7 @@ const REFRESH_HOSTS: RefreshHost[] = [
 export const EXPECTED_TOOL_NAMES = [
   "start_session",
   "session_check",
+  "check_update",
   "how_to_refresh_mcp",
   "recommend_model",
   "get_sticky",
