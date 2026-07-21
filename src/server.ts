@@ -213,7 +213,7 @@ server.tool(
 
 server.tool(
   "start_session",
-  "작업 시작(compact): 채택 모델 + alert codes + optional recommend. 주간 report는 include_report/verbose.",
+  "작업 시작(compact): version + adopted model + alerts + optional recommend + run_hint.ko. Task model=primary_id. include_report/verbose로 report.",
   startSessionArgs,
   async (args) =>
     jsonToolResult(
