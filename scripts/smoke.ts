@@ -25,6 +25,7 @@ import {
   EXPECTED_TOOL_NAMES,
   mcpRefreshSessionHint,
 } from "../src/refreshHelp.ts";
+import { detectVerbalModelRequest } from "../src/verbalOverride.ts";
 import { verifyBuiltInScenarios, verifyRecommendPayload } from "../src/compliance.ts";
 import { getUsageSummary, logModelUsage } from "../src/usage.ts";
 import { getVersionInfo, buildUpdateHint } from "../src/version.ts";
@@ -228,6 +229,21 @@ const cases: Case[] = [
     },
     expectPrimary: "Composer 2.5",
   },
+  {
+    name: "말 지정 페이블로 → Fable",
+    input: { task_description: "로그인 문구 i18n 한 줄 수정 페이블로 해보자" },
+    expectPrimary: "Fable 5",
+    expectSlug: "claude-fable-5-thinking-high",
+  },
+  {
+    name: "말 지정 코덱스로 UI override",
+    input: {
+      task_description: "대시보드 레이아웃 리팩터 코덱스로",
+      tags: ["ui"],
+    },
+    expectPrimary: "GPT-5 Codex",
+    expectSlug: "gpt-5.6-terra-medium",
+  },
 ];
 
 let failed = 0;
@@ -273,7 +289,7 @@ for (const c of cases) {
     r.primary_tier === MODEL_TIER[r.primary] &&
     typeof r.prefer_cheaper === "boolean" &&
     !!r.token_risk &&
-    r.reason.length < 220;
+    r.reason.length < 300;
   const keepSilentOk =
     c.expectStick !== "keep" || r.sticky_suggest === "keep_silent";
   const ok =
@@ -357,7 +373,7 @@ for (const ex of EXAMPLE_PROMPTS) {
 // compact payload
 {
   const r = recommendModel({ task_description: "i18n 한 줄" });
-  const c = compactRecommendResult(r, { mcp_version: "0.8.0" });
+  const c = compactRecommendResult(r, { mcp_version: "0.8.1" });
   const clarity = c.clarity as { ko?: string; en?: string } | undefined;
   const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
   const costPreview = c.cost_preview as
@@ -396,7 +412,7 @@ for (const ex of EXAMPLE_PROMPTS) {
       r.primary_id,
     ) &&
     !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
-    c.mcp_version === "0.8.0" &&
+    c.mcp_version === "0.8.1" &&
     !!(c.must_do as { ko?: string[]; task_model?: string })?.ko?.length &&
     (c.must_do as { task_model?: string }).task_model === r.primary_id &&
     !("scores" in c) &&
@@ -623,7 +639,7 @@ try {
   const v = getVersionInfo({ skip_fetch: true });
   const hint = buildUpdateHint(v, "ko");
   const ok =
-    v.version === "0.8.0" &&
+    v.version === "0.8.1" &&
     v.name === "compass-mcp" &&
     !!hint.message &&
     EXPECTED_TOOL_NAMES.includes("check_update") &&
@@ -634,13 +650,46 @@ try {
 }
 
 {
-  const builtIn = verifyBuiltInScenarios("0.8.0");
+  const builtIn = verifyBuiltInScenarios("0.8.1");
   const ok = builtIn.ok && builtIn.checks.length >= 15;
   console.log(
     `[${ok ? "OK" : "FAIL"}] verify_run_compliance built_in checks=${builtIn.checks.filter((x) => !x.ok).length} fail`,
   );
   extraChecks += 1;
   if (!ok) failed += 1;
+}
+
+{
+  const fable = recommendModel({
+    task_description: "로그인 문구 i18n 한 줄 수정 페이블로 해보자",
+  });
+  const codex = recommendModel({
+    task_description: "대시보드 레이아웃 리팩터 코덱스로",
+    tags: ["ui"],
+  });
+  const blocked = recommendModel({
+    task_description: "페이블로 해보자",
+    project_config: { blocked_models: ["Fable 5"] },
+  });
+  const compact = compactRecommendResult(fable, { mcp_version: "0.8.1" });
+  const clarity = compact.clarity as { ko?: string } | undefined;
+  const mustDo = compact.must_do as { task_model?: string } | undefined;
+  const detectOk =
+    detectVerbalModelRequest("페이블로 해보자")?.model === "Fable 5" &&
+    detectVerbalModelRequest("타입 에러 코덱스로")?.model === "GPT-5 Codex" &&
+    fable.primary === "Fable 5" &&
+    fable.verbal_override?.applied === true &&
+    codex.primary === "GPT-5 Codex" &&
+    codex.verbal_override?.applied === true &&
+    blocked.primary !== "Fable 5" &&
+    blocked.reason.includes("말 지정 but unavailable") &&
+    !!clarity?.ko?.includes("주인님 말 지정: Fable") &&
+    mustDo?.task_model === fable.primary_id;
+  console.log(
+    `[${detectOk ? "OK" : "FAIL"}] verbal override fable=${fable.primary} codex=${codex.primary}`,
+  );
+  extraChecks += 1;
+  if (!detectOk) failed += 1;
 }
 
 const total = cases.length + EXAMPLE_PROMPTS.length + extraChecks;

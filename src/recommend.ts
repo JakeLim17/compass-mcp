@@ -17,6 +17,7 @@ import {
 import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
 import { buildMustDo } from "./mustDo.js";
+import { detectVerbalModelRequest } from "./verbalOverride.js";
 
 export type ModelId =
   | "Composer 2.5"
@@ -327,6 +328,12 @@ export interface RecommendResult {
   cost_preview: CostPreview;
   /** UI auto-switch off + runner may differ from recommendation */
   honest_limit: UsageEstimate;
+  /** 주인님 말 지정 (task_description explicit model request) */
+  verbal_override?: {
+    requested: ModelId;
+    label: string;
+    applied: boolean;
+  };
 }
 
 const MODELS: ModelId[] = [
@@ -1278,6 +1285,35 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     hardBug,
   });
 
+  const verbal = detectVerbalModelRequest(text);
+  let verbalApplied = false;
+  let verbalUnavailable = false;
+  if (verbal) {
+    const verbalAvailable =
+      !blocked.has(verbal.model) &&
+      isHostModelAvailable(host, verbal.model, blocked);
+    if (verbalAvailable) {
+      if (primary !== verbal.model) {
+        alternative = primary;
+        primary = verbal.model;
+      }
+      verbalApplied = true;
+    } else {
+      verbalUnavailable = true;
+      const ranked = [...MODELS].sort((a, b) => scores[b] - scores[a]);
+      const next = ranked.find(
+        (m) => m !== verbal.model && !blocked.has(m) && isHostModelAvailable(host, m, blocked),
+      );
+      if (next && primary !== next) {
+        alternative = primary === next ? alternative : primary;
+        primary = next;
+      }
+    }
+    [primary, alternative] = ensureNotBlocked(primary, alternative, scores, cfg, {
+      hardBug,
+    });
+  }
+
   const fbOpts = { hardBug, unavailable: blocked };
   const cheaper_fallback = pickCheaperFallback(primary, fbOpts);
   const cheaper_fallback_slug = cheaper_fallback.slug;
@@ -1302,6 +1338,11 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     cheaper_fallback,
     fallback_chain,
   );
+  if (verbalApplied && verbal) {
+    reason = `주인님 말 지정: ${verbal.label} → ${primary} · ${reason}`;
+  } else if (verbalUnavailable && verbal) {
+    reason = `말 지정 but unavailable · ${verbal.label} 요청 · ${reason}`;
+  }
   if (stick_action === "keep") {
     reason = `모델 유지 · ${reason}`;
   } else if (stick_action === "switch") {
@@ -1365,6 +1406,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       host,
     ),
     honest_limit: { ko: "", en: "" },
+    ...(verbal
+      ? {
+          verbal_override: {
+            requested: verbal.model,
+            label: verbal.label,
+            applied: verbalApplied,
+          },
+        }
+      : {}),
     ...(stick_action
       ? {
           stick_action,
@@ -1394,6 +1444,7 @@ export function buildRecommendClarity(result: RecommendResult): {
     primary_cost_tier,
     cost_preview,
     model_persistence,
+    verbal_override,
   } = result;
   const weightKo =
     cost_preview.weight === "light"
@@ -1403,6 +1454,18 @@ export function buildRecommendClarity(result: RecommendResult): {
         : "보통";
   const persistKo = model_persistence ? ` ${model_persistence.ko}.` : "";
   const persistEn = model_persistence ? ` ${model_persistence.en}.` : "";
+  const verbalKo =
+    verbal_override?.applied
+      ? ` 주인님 말 지정: ${verbal_override.label}.`
+      : verbal_override && !verbal_override.applied
+        ? ` 말 지정(${verbal_override.label}) 불가 → 점수 기반.`
+        : "";
+  const verbalEn =
+    verbal_override?.applied
+      ? ` Verbal override: ${verbal_override.label}.`
+      : verbal_override && !verbal_override.applied
+        ? ` Verbal ${verbal_override.label} unavailable → scored fallback.`
+        : "";
   return {
     for_task: {
       primary,
@@ -1410,8 +1473,8 @@ export function buildRecommendClarity(result: RecommendResult): {
       cost_tier: primary_cost_tier,
     },
     clarity: {
-      ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}). ${cost_preview.advice.ko}.${persistKo} MCP 호출 모델과 별개.`,
-      en: `Task recommendation: ${primary} (${primary_id}, ${cost_preview.weight}). ${cost_preview.advice.en}.${persistEn} Separate from MCP caller.`,
+      ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}).${verbalKo} ${cost_preview.advice.ko}.${persistKo} MCP 호출 모델과 별개.`,
+      en: `Task recommendation: ${primary} (${primary_id}, ${cost_preview.weight}).${verbalEn} ${cost_preview.advice.en}.${persistEn} Separate from MCP caller.`,
     },
     cost_preview,
     honest_limit: {

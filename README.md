@@ -69,6 +69,8 @@ Paste into `~/.cursor/mcp.json`, then refresh MCP (`how_to_refresh_mcp`).
 
 The agent **calling** this MCP (e.g. Composer) may differ from the **task** recommendation (`primary_id`). That is intentional.
 
+**Verbal override:** `페이블로` / `코덱스로` / `use fable` in `task_description` → that model wins over scoring; if blocked → next candidate + `말 지정 but unavailable` in `reason`.
+
 ---
 
 ## Cursor catalog (Task-enabled)
