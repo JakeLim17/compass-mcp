@@ -430,6 +430,7 @@ server.tool(
       return jsonToolResult({
         found: loaded.found,
         cost_bias: loaded.config.cost_bias ?? "cheap(default)",
+        enabled: loaded.config.enabled_models ?? [],
         blocked: loaded.config.blocked_models ?? [],
         unavailable: loaded.config.unavailable_models ?? [],
       });
@@ -498,14 +499,19 @@ server.tool(
     if (!verbose) {
       return jsonToolResult({
         philosophy:
-          "Task-fit primary on every host — if unavailable, use candidates[1].id (not Cursor-only).",
+          "Task-fit primary on every host — lightest id varies (Cursor=Composer, Claude=Haiku, GPT=Mini). Unavailable → candidates[1].id.",
+        lightest_note:
+          "Haiku = Claude light example; Cursor light = Composer; GPT light = Mini/Nano.",
         hosts: hosts.map((h) => ({
           id: h.id,
           aliases: h.aliases,
+          lightest: h.lightest,
           unavailable_roles: h.unavailable_roles ?? [],
           fallback_note: h.fallback_note,
         })),
+        full_ladder: hosts[0]?.full_ladder,
         cursor_ladders: hosts.find((h) => h.id === "cursor")?.ladders,
+        cursor_catalog: hosts.find((h) => h.id === "cursor")?.cursor_catalog,
       });
     }
     return jsonToolResult({ hosts }, true);

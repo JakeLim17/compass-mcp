@@ -30,6 +30,8 @@ export interface ProjectConfig {
   default_tier?: ModelTier;
   /** Display names or slugs to never pick as primary */
   blocked_models?: string[];
+  /** Whitelist — when set, models not listed are skipped (-200) */
+  enabled_models?: string[];
   /** Alias of blocked — model missing/unavailable → next on ladder */
   unavailable_models?: string[];
   /**
@@ -53,7 +55,10 @@ export const PROJECT_CONFIG_SCHEMA_DOC = {
   preferred_host: "cursor | claude | openai | generic (optional)",
   default_tier: "low | mid | high — soft score nudge",
   blocked_models: [
-    "Composer 2.5 | Claude Sonnet | Claude Opus | Fable 5 | Grok 5.x | GPT-5 Sol | GPT-5 Codex | slug",
+    "Composer 2.5 | Claude Sonnet | Claude Opus | Fable 5 | Grok 5.x | GPT-5 Sol | GPT-5 Codex | slug | GPT-5.5 | Opus 4.7 …",
+  ],
+  enabled_models: [
+    "optional whitelist — Composer 2.5, Claude Sonnet, … or Task slugs; omit = all roles",
   ],
   unavailable_models: ["same as blocked_models — skip + next on ladder"],
   cost_bias:
@@ -65,7 +70,16 @@ export const PROJECT_CONFIG_SCHEMA_DOC = {
   example: {
     preferred_host: "cursor",
     default_tier: "low",
-    blocked_models: [],
+    enabled_models: [
+      "Composer 2.5",
+      "Claude Sonnet",
+      "Claude Opus",
+      "Fable 5",
+      "Grok 5.x",
+      "GPT-5 Sol",
+      "GPT-5 Codex",
+    ],
+    blocked_models: ["GPT-5.5", "Opus 4.7", "Sonnet 4.6"],
     unavailable_models: [],
     cost_bias: "cheap",
     usage_alert_thresholds: { high_tier_today: 3, heavy_today: 8 },
@@ -111,6 +125,12 @@ function sanitize(raw: unknown): ProjectConfig {
   }
   if (Array.isArray(o.blocked_models)) {
     out.blocked_models = o.blocked_models
+      .filter((x): x is string => typeof x === "string" && !!x.trim())
+      .map((x) => x.trim())
+      .slice(0, 16);
+  }
+  if (Array.isArray(o.enabled_models)) {
+    out.enabled_models = o.enabled_models
       .filter((x): x is string => typeof x === "string" && !!x.trim())
       .map((x) => x.trim())
       .slice(0, 16);

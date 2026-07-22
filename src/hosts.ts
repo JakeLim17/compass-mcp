@@ -7,11 +7,18 @@
  * Cursor catalog SSOT: recommend.CURSOR_AGENT_CATALOG / CURSOR_TASK_SLUG
  * (UI chat dropdown still does not auto-switch).
  *
- * Avoids runtime import of recommend.js (type-only) to prevent circular deps.
+ * Lightest tier is **per host**, not a single Haiku slug:
+ * - cursor → Composer (composer-2.5-fast)
+ * - claude → Haiku (claude-haiku-*)
+ * - openai → Mini/Nano (gpt-4.1-mini)
+ * Logical role for lightest scoring: ModelId "Composer 2.5".
  */
 import type { ModelId } from "./recommend.js";
 
 export type HostId = "cursor" | "claude" | "openai" | "generic";
+
+/** Logical ModelId used in scoring for the lightest daily / copy tier */
+export const LIGHTEST_LOGICAL: ModelId = "Composer 2.5";
 
 /** Aliases fold into a real HostId (vscode/forge/openclaw → generic) */
 const HOST_ALIASES: Record<string, HostId> = {
@@ -39,6 +46,8 @@ export interface HostProfile {
   note: string;
   /** ChronoCode logical model → host-specific id/slug */
   ids: Record<ModelId, string>;
+  /** Human label for the lightest id on this host (docs only) */
+  lightest_label: string;
 }
 
 /** Cursor Task slugs — keep in sync with recommend.CURSOR_TASK_SLUG */
@@ -52,18 +61,66 @@ const CURSOR_IDS: Record<ModelId, string> = {
   "GPT-5 Codex": "gpt-5.6-terra-medium",
 };
 
+/** Enabled in Cursor Task/agent UI (screenshot green) — SSOT for recommend on host=cursor */
+export const CURSOR_TASK_ENABLED_SLUGS = [
+  "composer-2.5-fast",
+  "claude-sonnet-5-thinking-high",
+  "claude-opus-4-8-thinking-high",
+  "claude-fable-5-thinking-high",
+  "cursor-grok-4.5-high-fast",
+  "gpt-5.6-sol-medium",
+  "gpt-5.6-terra-medium",
+  "kimi-k2.7-code",
+] as const;
+
+/** Gray/disabled in UI — use in .compass-mcp.json blocked_models (display names OK) */
+export const CURSOR_BLOCKED_LABELS = [
+  "GPT-5.5",
+  "Sonnet 4.6",
+  "Codex 5.3",
+  "Opus 4.7",
+  "GPT-5.4",
+  "Opus 4.6",
+  "Opus 4.5",
+] as const;
+
+/** Chat dropdown only — not default-scored; host=generic if you must map */
+export const CURSOR_CHAT_ONLY = [
+  {
+    name: "Haiku 4.5",
+    note: "Claude light example (chat UI). Task slug unverified — use claude host light mapping.",
+  },
+  {
+    name: "GPT-5.4 Mini/Nano",
+    note: "OpenAI light (chat UI). openai host maps light → gpt-4.1-mini.",
+  },
+  { name: "Gemini Flash/Pro", note: "chat only — not in Cursor Task catalog" },
+  { name: "Luna", note: "chat only" },
+  { name: "Sonnet 4.5", note: "legacy chat; prefer Sonnet 5 Task slug" },
+] as const;
+
+export const FULL_LADDER_DOC =
+  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini/Nano · mid: Sonnet/Opus/Fable/Grok/Sol · high: Terra/Codex";
+
+export const LIGHTEST_BY_HOST_DOC = {
+  ko: "Haiku는 Claude light 예시, Cursor light=Composer, GPT light=Mini/Nano — 호스트마다 lightest id가 다름.",
+  en: "Haiku = Claude light example; Cursor light = Composer; GPT light = Mini/Nano — lightest id varies by host.",
+};
+
 export const HOST_PROFILES: Record<HostId, HostProfile> = {
   cursor: {
     id: "cursor",
     display_name: "Cursor",
+    lightest_label: "Composer 2.5 (composer-2.5-fast)",
     note:
-      "Catalog slugs only. Task-fit primary + candidates fallback_chain — if primary_id unavailable, try candidates[1].id (same on all hosts).",
+      "Catalog slugs only. Task-fit primary + candidates fallback_chain — if primary_id unavailable, try candidates[1].id.",
     ids: { ...CURSOR_IDS },
   },
   claude: {
     id: "claude",
     display_name: "Claude Desktop / Anthropic",
-    note: "Approximate Anthropic API / Claude Desktop ids — edit HOST_PROFILES.claude.ids to match your account.",
+    lightest_label: "Haiku (claude-haiku-4-5-20251001)",
+    note: "Approximate Anthropic ids — light role maps to Haiku, not Composer slug.",
     ids: {
       "Composer 2.5": "claude-haiku-4-5-20251001",
       "Claude Sonnet": "claude-sonnet-4-5-20250929",
@@ -77,7 +134,8 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
   openai: {
     id: "openai",
     display_name: "OpenAI / ChatGPT",
-    note: "Approximate OpenAI model ids — edit HOST_PROFILES.openai.ids to match your account.",
+    lightest_label: "GPT-4.1 Mini (gpt-4.1-mini)",
+    note: "Approximate OpenAI ids — light role maps to mini/nano tier.",
     ids: {
       "Composer 2.5": "gpt-4.1-mini",
       "Claude Sonnet": "gpt-4.1",
@@ -91,10 +149,11 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
   generic: {
     id: "generic",
     display_name: "Generic MCP host (VS Code / Forge / OpenClaw / other)",
+    lightest_label: "role:lightest",
     note:
-      "Role placeholders — edit ids for your host. VS Code MCP: use host=vscode or generic. Empty/unavailable ids are skipped in candidates.",
+      "Role placeholders — edit ids for your host. VS Code MCP: use host=vscode or generic.",
     ids: {
-      "Composer 2.5": "role:light",
+      "Composer 2.5": "role:lightest",
       "Claude Sonnet": "role:sonnet",
       "Claude Opus": "role:opus",
       "Fable 5": "role:mid",
@@ -104,6 +163,16 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
     },
   },
 };
+
+/** Host-specific lightest tier id (copy/i18n / tiny patch primary_id) */
+export function hostLightestId(host?: string | null): string {
+  return hostModelId(host, LIGHTEST_LOGICAL);
+}
+
+/** Host-specific lightest label for docs / clarity */
+export function hostLightestLabel(host?: string | null): string {
+  return getHostProfile(host).lightest_label;
+}
 
 /** Host-specific id is usable (non-empty, not marked unavailable) */
 export function isHostIdAvailable(id: string | null | undefined): boolean {
@@ -120,8 +189,16 @@ export function listHostProfiles(): Array<{
   note: string;
   aliases: string[];
   ids: Record<ModelId, string>;
+  lightest: { logical: ModelId; id: string; label: string };
+  lightest_note?: { ko: string; en: string };
   ladders?: string;
-  /** Roles with empty or unavailable ids — agents should fallback */
+  full_ladder?: string;
+  cursor_catalog?: {
+    task_enabled_slugs: readonly string[];
+    blocked_labels: readonly string[];
+    chat_only: readonly { name: string; note: string }[];
+    optional_slugs: string[];
+  };
   unavailable_roles?: ModelId[];
   fallback_note?: string;
 }> {
@@ -142,6 +219,13 @@ export function listHostProfiles(): Array<{
       note: profile.note,
       aliases: aliasByHost.get(id) ?? [],
       ids: profile.ids,
+      lightest: {
+        logical: LIGHTEST_LOGICAL,
+        id: profile.ids[LIGHTEST_LOGICAL],
+        label: profile.lightest_label,
+      },
+      full_ladder: FULL_LADDER_DOC,
+      lightest_note: LIGHTEST_BY_HOST_DOC,
       unavailable_roles:
         unavailable_roles.length > 0 ? unavailable_roles : undefined,
       fallback_note:
@@ -149,7 +233,13 @@ export function listHostProfiles(): Array<{
       ...(id === "cursor"
         ? {
             ladders:
-              "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (catalog-only)",
+              "light: Composer · Claude: Sonnet < Opus < Fable · GPT: Sol < Terra · design: Grok/Fable/Opus/Sonnet",
+            cursor_catalog: {
+              task_enabled_slugs: CURSOR_TASK_ENABLED_SLUGS,
+              blocked_labels: CURSOR_BLOCKED_LABELS,
+              chat_only: CURSOR_CHAT_ONLY,
+              optional_slugs: ["kimi-k2.7-code"],
+            },
           }
         : {}),
     };

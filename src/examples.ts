@@ -86,12 +86,13 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     expected_primaries: ["Claude Sonnet", "Composer 2.5", "Fable 5"],
     note: "Light planning → Sonnet/Composer may beat Fable.",
   },
-  // —— light patch / i18n → Composer 2.5 ——
+  // —— light patch / copy → host lightest (Cursor=Composer, Claude=Haiku) ——
   {
     category: "light_patch",
     ko: "로그인 문구 i18n 한 줄만 수정해줘",
     en: "Fix one i18n string on the login page",
     expected_primary: "Composer 2.5",
+    note: "Logical lightest role — primary_id varies: cursor=composer slug, claude=Haiku, openai=mini.",
   },
   {
     category: "light_patch",
@@ -122,7 +123,7 @@ export const EXAMPLE_PROMPTS_META = {
   model_persistence:
     "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Default avoids overspend — light patch→Composer, design competes (Fable/Grok/Opus/Sonnet), hard bug→Codex. quality/premium may escalate UI/design. Document both honestly.",
+    "Default avoids overspend — copy/i18n→host lightest, small patch→lightest, design competes (Fable/Grok/Opus/Sonnet), hard bug→Codex.",
   design_primary_varies:
     "Design/planning primary is NOT fixed to Claude/Fable — scope & keywords pick among Fable, Grok, Opus, Sonnet. unavailable on host → candidates[1].",
   reading_recommendation:

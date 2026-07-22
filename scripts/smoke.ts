@@ -37,6 +37,7 @@ type Case = {
     current_model?: string;
     project_config?: {
       blocked_models?: string[];
+      enabled_models?: string[];
       unavailable_models?: string[];
       cost_bias?: "prefer_cheap" | "prefer_cheaper" | "balanced" | "prefer_quality" | "quality" | "cheap";
       preferred_host?: "cursor" | "claude" | "openai" | "generic";
@@ -208,6 +209,17 @@ const cases: Case[] = [
     expectPrimary: "GPT-5 Sol",
   },
   {
+    name: "enabled_models whitelist UI→Composer",
+    input: {
+      task_description: "대시보드 레이아웃 리팩터",
+      tags: ["ui"],
+      project_config: {
+        enabled_models: ["Composer 2.5", "GPT-5 Sol"],
+      },
+    },
+    expectPrimary: "Composer 2.5",
+  },
+  {
     name: "Sonnet blocked UI → Composer",
     input: {
       task_description: "대시보드 레이아웃 UX",
@@ -345,7 +357,7 @@ for (const ex of EXAMPLE_PROMPTS) {
 // compact payload
 {
   const r = recommendModel({ task_description: "i18n 한 줄" });
-  const c = compactRecommendResult(r, { mcp_version: "0.7.1" });
+  const c = compactRecommendResult(r, { mcp_version: "0.8.0" });
   const clarity = c.clarity as { ko?: string; en?: string } | undefined;
   const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
   const costPreview = c.cost_preview as
@@ -370,7 +382,7 @@ for (const ex of EXAMPLE_PROMPTS) {
     forTask?.cost_tier === r.primary_cost_tier &&
     !!clarity?.ko &&
     clarity.ko.includes("작업용 추천") &&
-    clarity.ko.includes("맞음") &&
+    clarity.ko.includes("Composer") &&
     !!clarity?.en &&
     !!honest?.ko &&
     honest.ko.includes("자동 전환") &&
@@ -379,12 +391,12 @@ for (const ex of EXAMPLE_PROMPTS) {
     !!costPreview?.relative?.ko &&
     costPreview.relative.ko.includes("1×") &&
     !!costPreview?.advice?.ko &&
-    costPreview.advice.ko.includes("Composer") &&
+    costPreview.advice.ko.includes("lightest") &&
     !!(c.run_hint as { ko?: string; task_model?: string })?.ko?.includes(
       r.primary_id,
     ) &&
     !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
-    c.mcp_version === "0.7.1" &&
+    c.mcp_version === "0.8.0" &&
     !!(c.must_do as { ko?: string[]; task_model?: string })?.ko?.length &&
     (c.must_do as { task_model?: string }).task_model === r.primary_id &&
     !("scores" in c) &&
@@ -408,8 +420,8 @@ for (const ex of EXAMPLE_PROMPTS) {
     bug.primary === "GPT-5 Codex" &&
     !!bug.cost_preview.advice.ko &&
     bug.cost_preview.relative.ko.includes("4–5×") &&
-    buildCostPreview("Composer 2.5", "low", analyzeCommand("한 줄"), true)
-      .advice.ko.includes("맞음");
+    buildCostPreview("Composer 2.5", "low", analyzeCommand("로그인 문구 i18n"), true, "cursor")
+      .advice.ko.includes("lightest");
   console.log(`[${ok ? "OK" : "FAIL"}] cost_preview weight + advice`);
   extraChecks += 1;
   if (!ok) failed += 1;
@@ -527,6 +539,10 @@ try {
     task_description: "로그인 문구 i18n 한 줄 수정",
     host: "cursor",
   });
+  const claudeCopy = recommendModel({
+    task_description: "로그인 문구 i18n 한 줄 수정",
+    host: "claude",
+  });
   const claude = recommendModel({
     task_description: "CI 실패 재현과 난해한 타입 에러",
     tags: ["bug"],
@@ -551,6 +567,10 @@ try {
     cursor.host === "cursor" &&
     cursor.primary_id === cursor.primary_slug &&
     cursor.primary_slug === "composer-2.5-fast" &&
+    cursor.primary === "Composer 2.5" &&
+    claudeCopy.host === "claude" &&
+    claudeCopy.primary === "Composer 2.5" &&
+    claudeCopy.primary_id === "claude-haiku-4-5-20251001" &&
     cursor.candidates.length >= 2 &&
     claude.primary === "GPT-5 Codex" &&
     claude.cheaper_fallback.name === "GPT-5 Sol" &&
@@ -603,7 +623,7 @@ try {
   const v = getVersionInfo({ skip_fetch: true });
   const hint = buildUpdateHint(v, "ko");
   const ok =
-    v.version === "0.7.1" &&
+    v.version === "0.8.0" &&
     v.name === "compass-mcp" &&
     !!hint.message &&
     EXPECTED_TOOL_NAMES.includes("check_update") &&
@@ -614,7 +634,7 @@ try {
 }
 
 {
-  const builtIn = verifyBuiltInScenarios("0.7.1");
+  const builtIn = verifyBuiltInScenarios("0.8.0");
   const ok = builtIn.ok && builtIn.checks.length >= 15;
   console.log(
     `[${ok ? "OK" : "FAIL"}] verify_run_compliance built_in checks=${builtIn.checks.filter((x) => !x.ok).length} fail`,

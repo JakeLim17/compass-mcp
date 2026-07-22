@@ -2,7 +2,25 @@
   "$schema_note": "Copy to project root as .compass-mcp.json — soft prefs only; scoring SSOT is recommend_model.",
   "preferred_host": "cursor",
   "default_tier": "low",
-  "blocked_models": [],
+  "enabled_models": [
+    "Composer 2.5",
+    "Claude Sonnet",
+    "Claude Opus",
+    "Fable 5",
+    "Grok 5.x",
+    "GPT-5 Sol",
+    "GPT-5 Codex",
+    "kimi-k2.7-code"
+  ],
+  "blocked_models": [
+    "GPT-5.5",
+    "Sonnet 4.6",
+    "Codex 5.3",
+    "Opus 4.7",
+    "GPT-5.4",
+    "Opus 4.6",
+    "Opus 4.5"
+  ],
   "unavailable_models": [],
   "cost_bias": "cheap",
   "usage_alert_thresholds": {
@@ -12,9 +30,11 @@
   "_field_guide": {
     "preferred_host": "cursor | claude | openai | generic — host-mapped primary_id",
     "default_tier": "low | mid | high — soft score nudge when flat",
-    "blocked_models": "Never pick as primary (-200 score). Display names or slugs.",
+    "enabled_models": "Whitelist — only these logical models scored (display names or Task slugs). Omit = all catalog roles.",
+    "blocked_models": "Never pick as primary (-200 score). Display names, slugs, or gray UI labels (GPT-5.5, Opus 4.7…).",
     "unavailable_models": "Same as blocked — skip + next on fallback_chain",
     "cost_bias": "unset=cheap. quality | prefer_quality = premium OK. cheap | prefer_cheaper = save tokens",
-    "usage_alert_thresholds": "high_tier_today (Codex), heavy_today (mid+high) → prefer_cheaper in recommend"
+    "usage_alert_thresholds": "high_tier_today (Codex), heavy_today (mid+high) → prefer_cheaper in recommend",
+    "lightest_note": "Haiku = Claude light example; Cursor light = Composer; GPT light = Mini/Nano — see list_hosts"
   }
 }

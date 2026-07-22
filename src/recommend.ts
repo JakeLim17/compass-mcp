@@ -1,16 +1,18 @@
 /**
  * ChronoCode model scoring SSOT.
  * Goal: task-fit model — not “always cheapest”, not vendor-locked.
- * Light patch → Composer · UI/multi-file → Sonnet/Fable · design/plan → Fable/Grok/Opus/Sonnet (compete)
- * · hard CI/bug → Codex. Primary unavailable on host → next in fallback_chain / candidates.
- * Claude family: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex
+ * Light patch / copy → host lightest (Cursor=Composer, Claude=Haiku, GPT=Mini) · UI → Sonnet/Fable
+ * · design/plan → Fable/Grok/Opus/Sonnet · hard CI/bug → Codex/Terra.
+ * Claude ladder: lightest < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex
  * Only recommend Cursor catalog slugs for host=cursor.
  */
 import {
-  hostModelId,
-  isHostIdAvailable,
+  hostLightestLabel,
+  LIGHTEST_LOGICAL,
   resolveHostId,
   resolveModelIdFromHostId,
+  isHostIdAvailable,
+  hostModelId,
 } from "./hosts.js";
 import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -77,9 +79,12 @@ export const CURSOR_CATALOG_SET = new Set<string>(CURSOR_AGENT_CATALOG);
 /** Optional: resolve/sticky only — not in default MODELS scoring */
 export const CURSOR_OPTIONAL_SLUGS = new Set<string>(["kimi-k2.7-code"]);
 
-/** Claude family ladder (lowest → highest). Composer = Cursor-cheap below Sonnet. */
+/**
+ * Claude-family ladder (logical roles). Lightest host id varies:
+ * cursor=Composer slug · claude=Haiku · generic=role:lightest.
+ */
 export const CLAUDE_FAMILY_LADDER: ModelId[] = [
-  "Composer 2.5",
+  LIGHTEST_LOGICAL,
   "Claude Sonnet",
   "Claude Opus",
   "Fable 5",
@@ -89,7 +94,7 @@ export const CLAUDE_FAMILY_LADDER: ModelId[] = [
 export const GPT_FAMILY_LADDER: ModelId[] = ["GPT-5 Sol", "GPT-5 Codex"];
 
 export const CLAUDE_LADDER_DOC =
-  "Claude: Composer < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex (design/plan competes: Fable/Grok/Opus/Sonnet)";
+  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini · mid: Sonnet < Opus < Fable · GPT: Sol < Terra · design: Fable/Grok/Opus/Sonnet";
 
 export const GPT_LADDER_DOC = "Sol < Terra/Codex";
 
@@ -219,7 +224,9 @@ export function resolveModelId(raw?: string | null): ModelId | null {
   // optional catalog slug (kimi) — not a scored ModelId
   if (CURSOR_OPTIONAL_SLUGS.has(s)) return null;
   const lower = s.toLowerCase();
-  if (lower.includes("composer")) return "Composer 2.5";
+  if (lower.includes("haiku")) return LIGHTEST_LOGICAL;
+  if (lower.includes("composer")) return LIGHTEST_LOGICAL;
+  if (lower.includes("mini") || lower.includes("nano")) return LIGHTEST_LOGICAL;
   if (lower.includes("sonnet")) return "Claude Sonnet";
   if (lower.includes("opus")) return "Claude Opus";
   if (lower.includes("fable")) return "Fable 5";
@@ -228,7 +235,8 @@ export function resolveModelId(raw?: string | null): ModelId | null {
   if (lower.includes("sol") || lower === "gpt-5.6-sol-medium") return "GPT-5 Sol";
   if (lower.includes("gpt-5") || lower.includes("gpt5")) return "GPT-5 Codex";
   if (lower.startsWith("role:")) {
-    if (lower.includes("light") || lower.includes("cheap")) return "Composer 2.5";
+    if (lower.includes("lightest") || lower.includes("light") || lower.includes("cheap"))
+      return LIGHTEST_LOGICAL;
     if (lower.includes("sonnet")) return "Claude Sonnet";
     if (lower.includes("opus")) return "Claude Opus";
     if (lower.includes("mid") || lower.includes("ui")) return "Fable 5";
@@ -404,8 +412,12 @@ const KEYWORD_RULES: Array<{
     },
   },
   {
-    re: /i18n|문구|카피|한\s*줄|타이포|주석|lint|작은|퀵|핫픽스|문구\s*수정/i,
-    boost: { "Composer 2.5": 30 },
+    re: /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구/i,
+    boost: { [LIGHTEST_LOGICAL]: 45 },
+  },
+  {
+    re: /주석|lint|작은|퀵|핫픽스|한\s*줄|one[- ]?line/i,
+    boost: { [LIGHTEST_LOGICAL]: 28 },
   },
   {
     re: /기능\s*추가|버그픽스|패치|루프|일상|가성비/i,
@@ -547,8 +559,16 @@ const SAVE_BUDGET_RE =
 const LARGE_UI_RE =
   /전면\s*(리)?디자인|전체\s*ui|ui\s*전면|large\s*ui|redesign\s*(entire|whole|all)|멀티\s*파일\s*ui|넓은\s*(화면|레이아웃)|히어로\s*.*랜딩|랜딩\s*.*히어로/i;
 
+/** Copy/i18n/typo only — host lightest tier (not mid models) */
+export const COPY_ONLY_RE =
+  /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|문구\s*만|카피\s*만/i;
+
 const TINY_SCOPE_RE =
   /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*만|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|작은\s*(수정|패치)/i;
+
+export function isCopyOnlyTask(text: string): boolean {
+  return COPY_ONLY_RE.test(text ?? "");
+}
 
 const BROAD_SCOPE_RE =
   /전체\s*(코드|파일|리팩터|마이그레이션)|many\s*files|대량|일괄|코드베이스|대규모|broad|across\s*(the\s*)?(codebase|repo)/i;
@@ -567,6 +587,8 @@ export interface CommandSignals {
   ui: boolean;
   /** Coding/build phase detected in the task sentence */
   implementation: boolean;
+  /** i18n/copy/typo — host lightest tier, not Sonnet/Fable */
+  copy_only: boolean;
   /** One-line WHY for reason field */
   why: string;
 }
@@ -580,6 +602,7 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     tags.includes("architecture") ||
     /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정|기획|계획/i.test(t);
   const implementation = isImplementationTask(t);
+  const copy_only = isCopyOnlyTask(t);
   const large_ui = ui && (LARGE_UI_RE.test(t) || (BROAD_SCOPE_RE.test(t) && ui));
 
   let budget: CommandBudget = "neutral";
@@ -604,8 +627,10 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     why = "설계+구현 혼합 → 구현 신호 우선(Composer/UI면 Fable)";
   } else if (large_ui) {
     why = "넓은 UI 리디자인 → Fable 에스컬레이션";
+  } else if (copy_only) {
+    why = "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
   } else if (scope === "tiny" || TINY_SCOPE_RE.test(t)) {
-    why = "한 줄·작은 패치 → Composer(최소)";
+    why = "작은 패치 → lightest tier (호스트별 id)";
   } else if (ui) {
     why = "일반 UI → Sonnet(절약 기본, Fable 보류)";
   } else if (scope === "broad" || scope === "huge") {
@@ -623,6 +648,7 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     architecture,
     ui,
     implementation,
+    copy_only,
     why,
   };
 }
@@ -631,15 +657,28 @@ function isCheapBias(cfg?: ProjectConfig): boolean {
   return effectiveSaveBias(cfg);
 }
 
-/** Merge blocked_models + unavailable_models into a Set of ModelId */
+/** Merge blocked_models + unavailable_models + enabled_models whitelist into a Set of ModelId */
 export function unavailableSet(cfg?: ProjectConfig): Set<ModelId> {
+  const blocked = new Set<ModelId>();
   const raw = [
     ...(cfg?.blocked_models ?? []),
     ...(cfg?.unavailable_models ?? []),
   ];
-  return new Set(
-    raw.map((m) => resolveModelId(m)).filter((m): m is ModelId => !!m),
-  );
+  for (const m of raw) {
+    const id = resolveModelId(m);
+    if (id) blocked.add(id);
+  }
+  if (cfg?.enabled_models?.length) {
+    const enabled = new Set<ModelId>();
+    for (const m of cfg.enabled_models) {
+      const id = resolveModelId(m);
+      if (id) enabled.add(id);
+    }
+    for (const m of MODELS) {
+      if (!enabled.has(m)) blocked.add(m);
+    }
+  }
+  return blocked;
 }
 
 /**
@@ -795,19 +834,26 @@ function buildCostAdvice(
   primary: ModelId,
   signals: CommandSignals,
   preferCheaper: boolean,
+  host: string,
 ): UsageEstimate {
   const heavy = primary === "GPT-5 Codex" || primary === "Grok 5.x";
-  const light = primary === "Composer 2.5";
+  const light = primary === LIGHTEST_LOGICAL;
   const midClaude =
     primary === "Claude Sonnet" ||
     primary === "Claude Opus" ||
     primary === "Fable 5";
 
-  if (light && (signals.scope === "tiny" || signals.scope === "local")) {
-    return {
-      ko: "이 작업엔 Composer가 맞음 — Codex·Fable은 과함",
-      en: "Composer fits this task — Codex/Fable would be overkill",
-    };
+  if (light && (signals.copy_only || signals.scope === "tiny" || signals.scope === "local")) {
+    const label = hostLightestLabel(host);
+    return signals.copy_only
+      ? {
+          ko: `문구/i18n/타이포 → lightest (${label}) — Sonnet/Fable/Codex는 과함`,
+          en: `Copy/i18n/typo → lightest (${label}) — Sonnet/Fable/Codex would be overkill`,
+        }
+      : {
+          ko: `작은 패치 → lightest tier — Codex·Fable은 과함`,
+          en: `Small patch → lightest tier — Codex/Fable would be overkill`,
+        };
   }
   if (
     signals.architecture &&
@@ -890,11 +936,12 @@ export function buildCostPreview(
   primaryCostTier: CostTier,
   signals: CommandSignals,
   preferCheaper: boolean,
+  host?: string,
 ): CostPreview {
   return {
     weight: costTierToWeight(primaryCostTier),
     relative: { ...RELATIVE_COST[primary] },
-    advice: buildCostAdvice(primary, signals, preferCheaper),
+    advice: buildCostAdvice(primary, signals, preferCheaper, host ?? "cursor"),
   };
 }
 
@@ -1132,6 +1179,13 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     }
   }
 
+  // Copy/i18n/typo → host lightest logical role
+  if (signals.copy_only && !hardBug && !blocked.has(LIGHTEST_LOGICAL)) {
+    scores[LIGHTEST_LOGICAL] += 40;
+    scores["Fable 5"] -= 12;
+    scores["GPT-5 Codex"] -= 10;
+  }
+
   const pureDesign =
     signals.architecture && !signals.implementation && !uiTask;
   applyProjectConfig(scores, cfg, saveBias && !signals.large_ui, {
@@ -1148,6 +1202,13 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   }
 
   let [primary, alternative] = topTwo(scores);
+
+  if (signals.copy_only && !hardBug && !blocked.has(LIGHTEST_LOGICAL)) {
+    if (primary !== LIGHTEST_LOGICAL) {
+      alternative = primary;
+      primary = LIGHTEST_LOGICAL;
+    }
+  }
 
   // Escalation overrides (command clearly needs it)
   if (hardBug) {
@@ -1301,6 +1362,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       primary_cost_tier,
       signals,
       prefer_cheaper,
+      host,
     ),
     honest_limit: { ko: "", en: "" },
     ...(stick_action
