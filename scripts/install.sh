@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compass MCP local setup — npm i + print mcp.json snippets (not published to npm yet).
+# Compass MCP local setup — npm i + optional one-command connect hint.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,7 +25,10 @@ echo "==> npm install"
 npm install
 
 echo ""
-echo "==> Optional: npm run typecheck / npm test"
+echo "==> Recommended: one-command MCP register (no JSON paste)"
+echo "    npm run connect -- cursor"
+echo "    npm run connect -- claude"
+echo "    npm run connect -- codex"
 echo ""
 
 ABS="$ROOT"
@@ -33,11 +36,13 @@ CURSOR_SNIPPET=$(cat <<EOF
 {
   "mcpServers": {
     "compass-mcp": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "tsx",
-        "${ABS}/src/server.ts"
-      ]
+        "${ABS}/dist/server.js"
+      ],
+      "env": {
+        "COMPASS_MCP_HOST": "cursor"
+      }
     }
   }
 }
@@ -48,10 +53,9 @@ CLAUDE_SNIPPET=$(cat <<EOF
 {
   "mcpServers": {
     "compass-mcp": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "tsx",
-        "${ABS}/src/server.ts"
+        "${ABS}/dist/server.js"
       ],
       "env": {
         "COMPASS_MCP_HOST": "claude"
@@ -62,17 +66,18 @@ CLAUDE_SNIPPET=$(cat <<EOF
 EOF
 )
 
-echo "========== Cursor: merge into ~/.cursor/mcp.json =========="
+echo "========== Manual fallback: Cursor ~/.cursor/mcp.json =========="
 echo "$CURSOR_SNIPPET"
 echo ""
-echo "========== Claude Desktop: claude_desktop_config.json =========="
+echo "========== Manual fallback: Claude Desktop claude_desktop_config.json =========="
 echo "$CLAUDE_SNIPPET"
 echo ""
 echo "Next:"
-echo "  1) Paste the snippet (merge mcpServers.compass-mcp)"
-echo "  2) Then refresh MCP — ask agent how_to_refresh_mcp"
+echo "  1) Prefer: npm run connect -- <cursor|claude|codex>"
+echo "  2) Or paste the snippet above (merge mcpServers.compass-mcp)"
+echo "  3) Then refresh MCP — ask agent how_to_refresh_mcp"
 echo "     (Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle OFF/ON)"
-echo "  3) Prefer start_session at work start; or get_sticky → recommend_model → log_model_usage → set_sticky"
+echo "  4) Prefer start_session at work start; or get_sticky → recommend_model → log_model_usage → set_sticky"
 echo ""
 echo "Data dir: ~/.cursor/compass-mcp/  (sticky.json, usage.jsonl, feedback.jsonl)"
 echo ""

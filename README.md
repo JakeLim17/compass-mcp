@@ -42,6 +42,32 @@ Local MCP recommends a catalog model. It does **not** auto-switch the chat UI dr
 
 ## Install
 
+### Easiest: one command
+
+Clone once, then register MCP for your host — **no manual `mcp.json` paste**:
+
+```bash
+git clone https://github.com/JakeLim17/compass-mcp.git
+cd compass-mcp
+npm run connect -- cursor    # Cursor
+npm run connect -- claude    # Claude Code (or Claude Desktop fallback)
+npm run connect -- codex     # OpenAI Codex CLI
+```
+
+Each command runs `npm install` + `build`, sets **`COMPASS_MCP_HOST`** automatically, and writes the server entry (`node …/dist/server.js`). Existing config is **backed up** before merge.
+
+**Then:** restart or refresh MCP in that app (Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle OFF/ON).
+
+Aliases: `npm run install:cursor` · `install:claude` · `install:codex`
+
+> Not on npm — clone from GitHub only.
+
+**Update later:** `npm run sync` (pull + build + smoke + refresh reminder).
+
+---
+
+### Manual setup (fallback)
+
 ```bash
 git clone https://github.com/JakeLim17/compass-mcp.git
 cd compass-mcp
@@ -50,9 +76,7 @@ npm run setup
 
 Paste into `~/.cursor/mcp.json`, then refresh MCP (`how_to_refresh_mcp`).
 
-> Not on npm — clone from GitHub only.
-
-**Update later:** `npm run sync` (pull + build + smoke + refresh reminder).
+> Prefer **`npm run connect -- cursor`** — avoids copy/paste errors.
 
 ---
 
@@ -108,7 +132,7 @@ Auth header: `Authorization: Bearer <COMPASS_MCP_API_KEY>`
 
 Without `COMPASS_MCP_API_KEY`, only **localhost** requests are accepted (console warning).
 
-OAuth full spec is not included in v0.9.0 — **API key + HTTPS URL** is the supported path.
+OAuth full spec is not included in v0.9.1 — **API key + HTTPS URL** is the supported path.
 
 ---
 
@@ -237,12 +261,15 @@ Verify: `get_project_config` then recommend with `cwd` set to project root.
 ## Scripts
 
 ```bash
-npm run setup      # install + mcp.json snippet + version
-npm run sync       # git pull + build + smoke + refresh reminder
-npm start          # stdio (Cursor local)
-npm run start:http # Streamable HTTP (remote connectors)
-npm test           # smoke (unit) + smoke:http
-npm run smoke:http # HTTP health + tools/list only
+npm run connect -- cursor   # one-command MCP register (recommended)
+npm run connect -- claude
+npm run connect -- codex
+npm run setup               # install + print manual snippets
+npm run sync                # git pull + build + smoke + refresh reminder
+npm start                   # stdio (Cursor local)
+npm run start:http          # Streamable HTTP (remote connectors)
+npm test                    # smoke + smoke:http + connect merge tests
+npm run smoke:connect       # connect merge helpers only
 npm run typecheck
 npm run build
 ```
@@ -268,7 +295,7 @@ Verified by `npm test` (smoke) + `verify_run_compliance`:
 - [x] Stale tools → `check_update` / `how_to_refresh_mcp` / `npm run sync`
 - [x] `npm test` all green
 
-**Self-score (v0.9.0):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do`.
+**Self-score (v0.9.1):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do`.
 
 ---
 

@@ -6,6 +6,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_TOOL_NAMES } from "../src/refreshHelp.js";
+import { getVersionInfo } from "../src/version.js";
+
+const PKG_VERSION = getVersionInfo({ skip_fetch: true }).version;
 
 const SMOKE_PORT = 3921;
 const BASE = `http://127.0.0.1:${SMOKE_PORT}`;
@@ -112,8 +115,8 @@ async function main() {
     if (!health.ok || !healthJson.ok || healthJson.name !== "compass-mcp") {
       failures.push("health check failed");
     }
-    if (healthJson.version !== "0.9.0") {
-      failures.push(`expected version 0.9.0, got ${healthJson.version}`);
+    if (healthJson.version !== PKG_VERSION) {
+      failures.push(`expected version ${PKG_VERSION}, got ${healthJson.version}`);
     }
     if (healthJson.transport !== "streamable-http") {
       failures.push("health transport mismatch");
