@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
-[![MCP](https://img.shields.io/badge/MCP-stdio-informational.svg)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-stdio%20%2B%20HTTP-informational.svg)](https://modelcontextprotocol.io)
 
 ## Purpose
 
@@ -53,6 +53,62 @@ Paste into `~/.cursor/mcp.json`, then refresh MCP (`how_to_refresh_mcp`).
 > Not on npm — clone from GitHub only.
 
 **Update later:** `npm run sync` (pull + build + smoke + refresh reminder).
+
+---
+
+## Remote HTTP MCP (Claude.ai / ChatGPT / web)
+
+Same tools as stdio — exposed over **MCP Streamable HTTP** (`GET`/`POST`/`DELETE` on `/mcp`).
+
+### 1. Start locally
+
+```bash
+cp .env.example .env   # optional
+export COMPASS_MCP_API_KEY="$(openssl rand -hex 32)"   # required before tunneling
+npm run start:http
+# → http://127.0.0.1:3920/mcp
+# → http://127.0.0.1:3920/health
+```
+
+Production / VPS: set `NODE_ENV=production` and **`COMPASS_MCP_API_KEY`** (server exits without it).
+
+### 2. HTTPS tunnel (for Claude.ai / ChatGPT connectors)
+
+Connectors require a **public HTTPS URL**. Use a tunnel to your local port:
+
+```bash
+# cloudflared (example)
+cloudflared tunnel --url http://127.0.0.1:3920
+
+# ngrok (example)
+ngrok http 3920
+```
+
+Your MCP URL becomes: `https://<tunnel-host>/mcp`  
+Auth header: `Authorization: Bearer <COMPASS_MCP_API_KEY>`
+
+### 3. Connect clients
+
+| Client | Steps |
+|--------|--------|
+| **Claude.ai** | Settings → Connectors → Add MCP server → URL `https://…/mcp` + Bearer token |
+| **ChatGPT** | Settings → Developer mode → Connectors → Remote MCP URL + API key (when available) |
+| **Cursor (remote)** | `~/.cursor/mcp.json` → `"url": "https://…/mcp"`, `"headers": { "Authorization": "Bearer …" }` |
+| **Cursor (local stdio)** | Existing setup — unchanged (`npm start` / `dist/server.js`) |
+
+### Env reference
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `COMPASS_MCP_API_KEY` | — | Bearer token; required for tunnel/production |
+| `COMPASS_MCP_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` on VPS) |
+| `COMPASS_MCP_PORT` | `3920` | HTTP port |
+| `COMPASS_MCP_PATH` | `/mcp` | MCP endpoint path |
+| `COMPASS_MCP_CORS` | claude.ai, chatgpt.com, cursor.com | Comma-separated origins (`*` dev only) |
+
+Without `COMPASS_MCP_API_KEY`, only **localhost** requests are accepted (console warning).
+
+OAuth full spec is not included in v0.9.0 — **API key + HTTPS URL** is the supported path.
 
 ---
 
@@ -183,8 +239,10 @@ Verify: `get_project_config` then recommend with `cwd` set to project root.
 ```bash
 npm run setup      # install + mcp.json snippet + version
 npm run sync       # git pull + build + smoke + refresh reminder
-npm start
-npm test           # smoke (45+ checks)
+npm start          # stdio (Cursor local)
+npm run start:http # Streamable HTTP (remote connectors)
+npm test           # smoke (unit) + smoke:http
+npm run smoke:http # HTTP health + tools/list only
 npm run typecheck
 npm run build
 ```
@@ -210,7 +268,7 @@ Verified by `npm test` (smoke) + `verify_run_compliance`:
 - [x] Stale tools → `check_update` / `how_to_refresh_mcp` / `npm run sync`
 - [x] `npm test` all green
 
-**Self-score (v0.8.0):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do`.
+**Self-score (v0.9.0):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do`.
 
 ---
 

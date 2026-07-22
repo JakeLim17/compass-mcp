@@ -373,7 +373,7 @@ for (const ex of EXAMPLE_PROMPTS) {
 // compact payload
 {
   const r = recommendModel({ task_description: "i18n 한 줄" });
-  const c = compactRecommendResult(r, { mcp_version: "0.8.1" });
+  const c = compactRecommendResult(r, { mcp_version: "0.9.0" });
   const clarity = c.clarity as { ko?: string; en?: string } | undefined;
   const honest = c.honest_limit as { ko?: string; en?: string } | undefined;
   const costPreview = c.cost_preview as
@@ -412,7 +412,7 @@ for (const ex of EXAMPLE_PROMPTS) {
       r.primary_id,
     ) &&
     !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
-    c.mcp_version === "0.8.1" &&
+    c.mcp_version === "0.9.0" &&
     !!(c.must_do as { ko?: string[]; task_model?: string })?.ko?.length &&
     (c.must_do as { task_model?: string }).task_model === r.primary_id &&
     !("scores" in c) &&
@@ -639,7 +639,7 @@ try {
   const v = getVersionInfo({ skip_fetch: true });
   const hint = buildUpdateHint(v, "ko");
   const ok =
-    v.version === "0.8.1" &&
+    v.version === "0.9.0" &&
     v.name === "compass-mcp" &&
     !!hint.message &&
     EXPECTED_TOOL_NAMES.includes("check_update") &&
@@ -650,7 +650,7 @@ try {
 }
 
 {
-  const builtIn = verifyBuiltInScenarios("0.8.1");
+  const builtIn = verifyBuiltInScenarios("0.9.0");
   const ok = builtIn.ok && builtIn.checks.length >= 15;
   console.log(
     `[${ok ? "OK" : "FAIL"}] verify_run_compliance built_in checks=${builtIn.checks.filter((x) => !x.ok).length} fail`,
@@ -671,7 +671,7 @@ try {
     task_description: "페이블로 해보자",
     project_config: { blocked_models: ["Fable 5"] },
   });
-  const compact = compactRecommendResult(fable, { mcp_version: "0.8.1" });
+  const compact = compactRecommendResult(fable, { mcp_version: "0.9.0" });
   const clarity = compact.clarity as { ko?: string } | undefined;
   const mustDo = compact.must_do as { task_model?: string } | undefined;
   const detectOk =

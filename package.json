@@ -1,22 +1,26 @@
 {
   "name": "compass-mcp",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "license": "MIT",
   "description": "Compass MCP — task-fit model routing with fallback chain (design competes, not Claude-only)",
   "type": "module",
   "bin": {
-    "compass-mcp": "./dist/server.js"
+    "compass-mcp": "./dist/server.js",
+    "compass-mcp-http": "./dist/httpServer.js"
   },
   "scripts": {
     "start": "tsx src/server.ts",
+    "start:http": "tsx src/httpServer.ts",
     "build": "tsc",
     "start:node": "node dist/server.js",
+    "start:http:node": "node dist/httpServer.js",
     "setup": "bash scripts/setup.sh",
     "sync": "bash scripts/sync.sh",
     "install:local": "bash scripts/install.sh",
     "smoke": "tsx scripts/smoke.ts",
-    "test": "tsx scripts/smoke.ts",
+    "smoke:http": "tsx scripts/smokeHttp.ts",
+    "test": "tsx scripts/smoke.ts && tsx scripts/smokeHttp.ts",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -25,10 +29,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "express": "^5.2.1",
     "tsx": "^4.19.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"
   }
