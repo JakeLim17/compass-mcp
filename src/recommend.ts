@@ -467,7 +467,7 @@ const UI_TASK_RE =
 
 /** Implementation / coding phase — design→build handoff */
 const IMPLEMENTATION_RE =
-  /구현|코딩|만들자|구현해보자|코드\s*작|개발해|implement|build\s*it|write\s*code|coding|만들어\s*줘|코딩해/i;
+  /구현|코딩|만들자|구현해보자|구현\s*들어가|코드\s*작|개발해|implement|build\s*it|write\s*code|coding|만들어\s*줘|코딩해/i;
 
 export function isImplementationTask(text: string): boolean {
   return IMPLEMENTATION_RE.test(text ?? "");
@@ -481,8 +481,19 @@ export const DESIGN_ROLE_MODELS: ModelId[] = [
   "Claude Sonnet",
 ];
 
+/** Heavy design models — after design, implementation defaults to Sonnet (save gate) */
+export const DESIGN_HANDOFF_MODELS: ModelId[] = [
+  "Fable 5",
+  "Grok 5.x",
+  "Claude Opus",
+];
+
 export function isDesignRoleModel(model: ModelId): boolean {
   return (DESIGN_ROLE_MODELS as string[]).includes(model);
+}
+
+export function isDesignHandoffModel(model: ModelId): boolean {
+  return (DESIGN_HANDOFF_MODELS as string[]).includes(model);
 }
 
 function buildModelPersistenceNote(
@@ -1262,13 +1273,20 @@ export function recommendModel(input: RecommendInput): RecommendResult {
 
   const designToImpl =
     currentResolved != null &&
-    isDesignRoleModel(currentResolved) &&
-    signals.implementation;
+    isDesignHandoffModel(currentResolved) &&
+    signals.implementation &&
+    !signals.large_ui;
 
-  if (
-    designToImpl ||
-    (signals.architecture && signals.implementation && !hardBug)
-  ) {
+  if (designToImpl) {
+    // Save gate: design done → build with Sonnet (not Fable). Verbal "페이블로" overrides later.
+    const implPrimary: ModelId = blocked.has("Claude Sonnet")
+      ? "Composer 2.5"
+      : "Claude Sonnet";
+    if (primary !== implPrimary && !blocked.has(implPrimary)) {
+      alternative = primary;
+      primary = implPrimary;
+    }
+  } else if (signals.architecture && signals.implementation && !hardBug) {
     const implPrimary: ModelId =
       uiTask && !blocked.has("Fable 5")
         ? "Fable 5"

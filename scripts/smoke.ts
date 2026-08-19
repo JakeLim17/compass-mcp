@@ -96,7 +96,7 @@ const cases: Case[] = [
       task_description: "방금 설계한 결제 모듈 구현해보자",
       current_model: "Grok 5.x",
     },
-    expectPrimary: "Composer 2.5",
+    expectPrimary: "Claude Sonnet",
     expectStick: "switch",
   },
   {
@@ -105,7 +105,16 @@ const cases: Case[] = [
       task_description: "결제 모듈 설계 구현 해보자",
       current_model: "claude-fable-5-thinking-high",
     },
-    expectPrimary: "Composer 2.5",
+    expectPrimary: "Claude Sonnet",
+    expectStick: "switch",
+  },
+  {
+    name: "Fable 설계 끝 구현 들어가 → Sonnet",
+    input: {
+      task_description: "설계 끝 구현 들어가",
+      current_model: "Fable 5",
+    },
+    expectPrimary: "Claude Sonnet",
     expectStick: "switch",
   },
   {
