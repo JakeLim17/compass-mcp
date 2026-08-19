@@ -1,318 +1,70 @@
-# Compass MCP (`compass-mcp`)
+# Compass MCP
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
-[![MCP](https://img.shields.io/badge/MCP-stdio%20%2B%20HTTP-informational.svg)](https://modelcontextprotocol.io)
-
-## Purpose
-
-**Pick the model that fits the task — not always the cheapest, not locked to one vendor.**
-
-Read the task sentence (intent · scope · difficulty) — not keyword spam.
-
-| Task | Primary (typical) |
-|------|-------------------|
-| Copy / i18n / typo | **Host lightest** (see ladder below) |
-| Small code patch | lightest tier |
-| UI / multi-file | Sonnet or Fable |
-| Design / planning / tradeoffs | **Fable · Grok · Opus · Sonnet** (compete by scope) |
-| Hard bug / CI | Codex (Terra) |
-
-**Lightest is per host — not always Haiku:**
-
-> Haiku = Claude light **example**. Cursor light = **Composer**. GPT light = **Mini/Nano**.
-
-| Host | Lightest id (copy/i18n/tiny) | Mid | High |
-|------|------------------------------|-----|------|
-| **cursor** | `composer-2.5-fast` | Sonnet · Opus · Fable · Grok · Sol | Terra/Codex |
-| **claude** | Haiku (`claude-haiku-*`) | Sonnet · Opus | — |
-| **openai** | Mini/Nano (`gpt-4.1-mini`) | gpt-4.1 · o4-mini | o3 |
-
-Scoring uses logical role **`Composer 2.5`** for the lightest tier; `primary_id` is host-mapped via `list_hosts`.
-
-**Philosophy:** best fit for the job → if unavailable on your host, **use the next id in `candidates` / `fallback_chain`**.
-
-Saving means **avoiding overspend** (Codex on a one-liner), not under-spending on design.
-
-Local MCP recommends a catalog model. It does **not** auto-switch the chat UI dropdown.
-
-**SSOT for scoring:** this MCP. Cursor rules only call tools — they must **not** paste full MCP dumps into chat (2-line summary).
-
----
+Local MCP that reads what you're doing and suggests which model fits — copy tweak vs UI vs nasty bug, that kind of thing.
 
 ## Install
 
-### Easiest: one command
-
-Clone once, then register MCP for your host — **no manual `mcp.json` paste**:
-
 ```bash
 git clone https://github.com/JakeLim17/compass-mcp.git
 cd compass-mcp
-npm run connect -- cursor    # Cursor
-npm run connect -- claude    # Claude Code (or Claude Desktop fallback)
-npm run connect -- codex     # OpenAI Codex CLI
-```
-
-Each command runs `npm install` + `build`, sets **`COMPASS_MCP_HOST`** automatically, and writes the server entry (`node …/dist/server.js`). Existing config is **backed up** before merge.
-
-**Then:** restart or refresh MCP in that app (Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle OFF/ON).
-
-Aliases: `npm run install:cursor` · `install:claude` · `install:codex`
-
-> Not on npm — clone from GitHub only.
-
-**Update later:** `npm run sync` (pull + build + smoke + refresh reminder).
-
----
-
-### Manual setup (fallback)
-
-```bash
-git clone https://github.com/JakeLim17/compass-mcp.git
-cd compass-mcp
-npm run setup
-```
-
-Paste into `~/.cursor/mcp.json`, then refresh MCP (`how_to_refresh_mcp`).
-
-> Prefer **`npm run connect -- cursor`** — avoids copy/paste errors.
-
----
-
-## Remote HTTP MCP (Claude.ai / ChatGPT / web)
-
-Same tools as stdio — exposed over **MCP Streamable HTTP** (`GET`/`POST`/`DELETE` on `/mcp`).
-
-### 1. Start locally
-
-```bash
-cp .env.example .env   # optional
-export COMPASS_MCP_API_KEY="$(openssl rand -hex 32)"   # required before tunneling
-npm run start:http
-# → http://127.0.0.1:3920/mcp
-# → http://127.0.0.1:3920/health
-```
-
-Production / VPS: set `NODE_ENV=production` and **`COMPASS_MCP_API_KEY`** (server exits without it).
-
-### 2. HTTPS tunnel (for Claude.ai / ChatGPT connectors)
-
-Connectors require a **public HTTPS URL**. Use a tunnel to your local port:
-
-```bash
-# cloudflared (example)
-cloudflared tunnel --url http://127.0.0.1:3920
-
-# ngrok (example)
-ngrok http 3920
-```
-
-Your MCP URL becomes: `https://<tunnel-host>/mcp`  
-Auth header: `Authorization: Bearer <COMPASS_MCP_API_KEY>`
-
-### 3. Connect clients
-
-| Client | Steps |
-|--------|--------|
-| **Claude.ai** | Settings → Connectors → Add MCP server → URL `https://…/mcp` + Bearer token |
-| **ChatGPT** | Settings → Developer mode → Connectors → Remote MCP URL + API key (when available) |
-| **Cursor (remote)** | `~/.cursor/mcp.json` → `"url": "https://…/mcp"`, `"headers": { "Authorization": "Bearer …" }` |
-| **Cursor (local stdio)** | Existing setup — unchanged (`npm start` / `dist/server.js`) |
-
-### Env reference
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `COMPASS_MCP_API_KEY` | — | Bearer token; required for tunnel/production |
-| `COMPASS_MCP_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` on VPS) |
-| `COMPASS_MCP_PORT` | `3920` | HTTP port |
-| `COMPASS_MCP_PATH` | `/mcp` | MCP endpoint path |
-| `COMPASS_MCP_CORS` | claude.ai, chatgpt.com, cursor.com | Comma-separated origins (`*` dev only) |
-
-Without `COMPASS_MCP_API_KEY`, only **localhost** requests are accepted (console warning).
-
-OAuth full spec is not included in v0.9.1 — **API key + HTTPS URL** is the supported path.
-
----
-
-## Agents: recommend → execute (critical)
-
-1. Call `recommend_model` or `start_session` with `task_description`
-2. Read **`run_hint.ko`**: `다음 Task model=<primary_id> …`
-3. Read **`must_do.ko`** checklist (4 lines)
-4. Launch Task/subagent with **`model: primary_id`**
-5. If host says unavailable → `candidates[1].id`, then next in `fallback_chain`
-6. `log_model_usage` → `set_sticky`
-7. Tell the user via **`model_persistence`** — never say “sticky”
-8. Optional: `verify_run_compliance` after deploy/update
-
-The agent **calling** this MCP (e.g. Composer) may differ from the **task** recommendation (`primary_id`). That is intentional.
-
-**Verbal override:** `페이블로` / `코덱스로` / `use fable` in `task_description` → that model wins over scoring; if blocked → next candidate + `말 지정 but unavailable` in `reason`.
-
----
-
-## Cursor catalog (Task-enabled)
-
-We only recommend slugs Cursor can run as Task `model`. Gray UI models → `blocked_models`.
-
-| Status | Models |
-|--------|--------|
-| **Enabled (Task)** | Composer 2.5, Sonnet 5, Opus 4.8, Fable 5, Grok 4.5, Sol, Terra, Kimi (optional) |
-| **Blocked (gray)** | GPT-5.5, Sonnet 4.6, Codex 5.3, Opus 4.7, GPT-5.4, Opus 4.6, Opus 4.5 |
-| **Chat only** | Haiku 4.5, GPT-5.4 Mini/Nano, Gemini, Luna, Sonnet 4.5 — documented in `list_hosts`; not default-scored |
-
-| Family | Ladder (cheap → heavy) | Task slugs |
-|--------|------------------------|------------|
-| Cursor light | Composer | `composer-2.5-fast` |
-| Claude | Sonnet < Opus < Fable | `claude-sonnet-5-thinking-high` → … → `claude-fable-5-thinking-high` |
-| GPT | Sol < Terra/Codex | `gpt-5.6-sol-medium` → `gpt-5.6-terra-medium` |
-| Design | Grok · Fable · Opus · Sonnet | scope picks primary |
-| Optional | Kimi | `kimi-k2.7-code` (resolve/sticky only) |
-
-### How to add a model
-
-1. Add slug to `CURSOR_AGENT_CATALOG` and `CURSOR_TASK_SLUG` in `src/recommend.ts`
-2. Add `ModelId`, `BASE`, `COST_TIER`, `MODEL_TIER`, keyword/tag boosts as needed
-3. Mirror slug in `CURSOR_IDS` in `src/hosts.ts` (cursor profile)
-4. Add smoke case + example prompt if user-facing
-5. Bump version, `npm test`, refresh MCP
-
----
-
-## Fallback chain (`candidates`)
-
-`recommend_model` returns compact JSON including:
-
-```json
-{
-  "primary_id": "composer-2.5-fast",
-  "candidates": [ … ],
-  "fallback_chain": ["composer-2.5-fast", "claude-sonnet-5-thinking-high", "…"],
-  "run_hint": {
-    "ko": "다음 Task model=… (불가 시 …) → log_model_usage → set_sticky"
-  }
-}
-```
-
-On `host=claude`, copy/i18n tasks still score logical `Composer 2.5` but `primary_id` maps to Haiku.
-
----
-
-## Tools (complete)
-
-| Tool | What |
-|------|------|
-| `start_session` | Compact work start: version, adopted model, alerts, optional recommend + **`run_hint`** |
-| `session_check` | Alias of `start_session` |
-| `check_update` | Local version + optional git behind hint; links to `npm run sync` + refresh |
-| `how_to_refresh_mcp` | Host-specific MCP refresh steps (Cursor: Tools & MCP toggle) |
-| `recommend_model` | Task-fit primary + `candidates` + `run_hint` + **`must_do`** + `mcp_version` |
-| `verify_run_compliance` | Built-in 3 scenarios — must_do/run_hint/mcp_version/candidates≥2 present |
-| `get_sticky` / `set_sticky` / `clear_sticky` | Adopted model persistence (internal names; user: “같은 작업이면 모델 유지”) |
-| `get_project_config` | Load `.compass-mcp.json` — **enabled_models**, **blocked**, **cost_bias** |
-| `get_usage_summary` | Counts + alerts + `report.ko`/`report.en` (verbose or locale) |
-| `log_model_usage` | Append usage JSONL (no secrets) |
-| `feedback_recommendation` | good/bad → **±3** score nudge (recent 25 ×1.5, cap ±16) on next recommend |
-| `list_example_prompts` | Example KO prompts + expected primaries |
-| `list_hosts` | Host profiles + lightest mapping + Cursor catalog + ladders |
-
-Pass `verbose: true` only when debugging.
-
----
-
-## Project config (`.compass-mcp.json`)
-
-Walk up from `cwd` for `.compass-mcp.json`. Copy from [`.compass-mcp.json.example`](./.compass-mcp.json.example).
-
-| Field | Effect on `recommend_model` |
-|-------|----------------------------|
-| `enabled_models` | Whitelist — models not listed are skipped (−200) |
-| `blocked_models` / `unavailable_models` | −200 score; skipped in `candidates` |
-| `cost_bias: cheap` (default when unset) | Boost lightest/Sonnet; penalize overspend |
-| `cost_bias: quality` | Allow Fable/Grok/Codex more often |
-| `default_tier: low\|mid\|high` | Soft nudge when scores are flat |
-| `preferred_host` | Host-mapped `primary_id` (cursor/claude/openai/generic) |
-| `usage_alert_thresholds` | `high_tier_today` / `heavy_today` → `prefer_cheaper` when alerts fire |
-
-Example blocked list matches Cursor gray models: GPT-5.5, Sonnet 4.6, Opus 4.7, …
-
-Verify: `get_project_config` then recommend with `cwd` set to project root.
-
----
-
-## Behavior cheatsheet
-
-| Command signal | Primary |
-|----------------|---------|
-| Copy / i18n / typo | **Host lightest** (Cursor=Composer, Claude=Haiku, GPT=Mini) |
-| Small patch (code) | lightest tier |
-| Normal UI | **Sonnet** (not Fable) |
-| Large UI redesign | Fable |
-| Hard bug / CI | Terra; fallback Sol → Sonnet |
-| Design / planning / tradeoffs | **Fable / Grok / Opus / Sonnet** |
-| Design → implement | **switch** → lightest (UI impl → Fable) |
-| “싸게 / 토큰 아껴” | avoid overspend |
-| “최고 품질 / 비싸도 됨” / `cost_bias: quality` | premium OK |
-
----
-
-## Scripts
-
-```bash
-npm run connect -- cursor   # one-command MCP register (recommended)
+npm run connect -- cursor
 npm run connect -- claude
 npm run connect -- codex
-npm run setup               # install + print manual snippets
-npm run sync                # git pull + build + smoke + refresh reminder
-npm start                   # stdio (Cursor local)
-npm run start:http          # Streamable HTTP (remote connectors)
-npm test                    # smoke + smoke:http + connect merge tests
-npm run smoke:connect       # connect merge helpers only
-npm run typecheck
-npm run build
 ```
 
----
+Pick one host line. It installs, builds, and writes your MCP config (existing config gets backed up first).
 
-## Practical 10/10 checklist
+Then restart the app. On Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle off and on.
 
-Verified by `npm test` (smoke) + `verify_run_compliance`:
+Not on npm — clone from GitHub. Updates: `npm run sync`.
 
-- [x] `npm run setup` prints version
-- [x] MCP tools include `start_session`, `check_update`, `verify_run_compliance`, `recommend_model`, `get_project_config`
-- [x] `recommend_model` returns `run_hint.ko` + **`must_do.ko`** with `primary_id`
-- [x] Every compact recommend includes **`mcp_version`**
-- [x] `candidates.length >= 2` and catalog slugs only (cursor host)
-- [x] **Agent compliance:** Task `model=must_do.task_model` (not just MCP caller)
-- [x] `log_model_usage` + `set_sticky` after adoption
-- [x] User never sees the word “sticky” — `model_persistence` instead
-- [x] `.compass-mcp.json` `enabled_models` / `blocked_models` affect scoring
-- [x] `list_hosts` exposes per-host lightest + Cursor enabled/blocked/chat-only
-- [x] `get_usage_summary` alerts when high-tier overused
-- [x] `feedback_recommendation` nudges next recommend (±3, recency ×1.5)
-- [x] Stale tools → `check_update` / `how_to_refresh_mcp` / `npm run sync`
-- [x] `npm test` all green
+## Use it
 
-**Self-score (v0.9.1):** usefulness **10 / 10** · completeness **10 / 10** for agents that follow `must_do`.
+Just say what you're doing in chat. The agent calls Compass and gets a model suggestion.
 
----
+Examples:
+
+- "What model should I use for this?"
+- "Fix the login copy with Fable"
+- "Debug this flaky type-error regression"
+
+Say a model name if you want (`페이블로`, `use codex`) — that wins over the score.
+
+## What it usually picks
+
+| You're doing… | Typical pick |
+|---------------|--------------|
+| Copy, i18n, one-line fix | Composer (Cursor) · Haiku (Claude) · Mini (Codex) |
+| Small code patch | Same light tier |
+| UI / multi-file layout | Sonnet |
+| Big UI redesign | Fable |
+| Design, planning, tradeoffs | Fable · Grok · Opus · Sonnet |
+| Hard bug, CI, type errors | Codex |
+
+"Lightest" depends on the host — Cursor's cheap slot is Composer, not Haiku. If the top pick isn't available, it falls back to the next in the list.
 
 ## Limits
 
-- **Chat UI dropdown does not auto-switch** — intentional ceiling; agents must pass `primary_id` to Task/subagent
-- **`primary` / `for_task` ≠ the model running the MCP call**
-- Haiku/Gemini chat models are **not** Cursor Task slugs unless Cursor adds them — use host mapping
-- Cost/token_risk are relative, not dollars
-- Claude/OpenAI host ids are approximate (`src/hosts.ts`)
+- Does not change the chat dropdown for you — you or the agent still pick the model.
+- Cursor is the main target; Claude Code and Codex CLI work too.
+- Remote web connectors are optional (see below).
 
----
+## Remote HTTP (optional)
+
+For Claude.ai / ChatGPT connectors, not day-to-day Cursor:
+
+```bash
+export COMPASS_MCP_API_KEY="$(openssl rand -hex 32)"
+npm run start:http
+# → http://127.0.0.1:3920/mcp
+```
+
+Tunnel that port over HTTPS and point the connector at `/mcp` with `Authorization: Bearer <key>`. Local stdio (`npm run connect`) is enough for most people.
 
 ## License
 
-[MIT](./LICENSE)
+MIT
 
 ---
 
-**한국어:** 명령을 정독해 **작업에 맞는 모델**을 고르는 로컬 MCP. lightest는 호스트마다 다름(Cursor=Composer, Claude=Haiku 예시, GPT=Mini). 추천 후 **`run_hint.ko`대로 Task `model=primary_id`**. compact 응답. 에이전트는 MCP 덤프·「sticky」단어 금지.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.1+). `npm run connect -- cursor|claude|codex` 한 줄 설치. 채팅에 그냥 "이 작업 모델 뭐 쓸까", "페이블로 문구 수정", "타입 에러 회귀 디버그"처럼 말하면 됨. 말로 모델 지정(`페이블로`, `코덱스로`)하면 점수보다 우선. 채팅 드롭다운은 자동 안 바뀜 — Cursor가 메인, 웹 HTTP는 필요할 때만.
