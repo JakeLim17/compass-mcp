@@ -11,6 +11,7 @@ import {
   PROJECT_CONFIG_SCHEMA_DOC,
 } from "./projectConfig.js";
 import {
+  compactGateRecommend,
   compactRecommendResult,
   recommendModel,
   type Tag,
@@ -110,7 +111,8 @@ function buildStartSessionPayload(input: {
     period: input.period ?? "week",
     alert_thresholds: project.config.usage_alert_thresholds,
   });
-  let recommend: Record<string, unknown> | null = null;
+  let gate: Record<string, unknown> | null = null;
+  let recommendVerbose: Record<string, unknown> | null = null;
   if (input.task_description?.trim()) {
     const result = recommendModel({
       task_description: input.task_description,
@@ -121,36 +123,20 @@ function buildStartSessionPayload(input: {
       feedback_adjust: getFeedbackAdjustments(),
       usage_prefer_cheaper: usage.alerts.length > 0,
     });
-    recommend = verbose
-      ? {
-          ...compactRecommendResult(result, { mcp_version: serverVersion }),
-          cheaper_fallback: result.cheaper_fallback,
-          usage_estimate: result.usage_estimate,
-          scores: result.scores,
-        }
-      : compactRecommendResult(result, { mcp_version: serverVersion });
+    gate = compactGateRecommend(result);
+    recommendVerbose = {
+      ...compactRecommendResult(result, { mcp_version: serverVersion }),
+      cheaper_fallback: result.cheaper_fallback,
+      usage_estimate: result.usage_estimate,
+      scores: result.scores,
+    };
   }
-
-  const versionInfo = getVersionInfo({ skip_fetch: true });
-  const updateHint = buildUpdateHint(versionInfo, input.locale ?? "ko");
 
   if (!verbose) {
     return {
-      version: serverVersion,
-      update: updateHint,
       adopted_model: stickyRes.sticky?.adopted_model ?? null,
-      stick_action: recommend?.stick_action,
-      model_persistence: recommend?.model_persistence,
-      run_hint: recommend?.run_hint ?? null,
-      must_do: recommend?.must_do ?? null,
       alerts: usage.alerts.map((a) => a.code),
-      usage: {
-        period: usage.period,
-        total_today: usage.total_today,
-        by_tier: usage.by_tier,
-      },
-      recommend,
-      tip: "Agents: summarize clarity.ko + run_hint.ko; don’t paste MCP dumps. Task model=primary_id. 주인님 보고 시 sticky 단어 금지.",
+      ...(gate ?? {}),
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
       ...(includeReport
         ? {
@@ -163,8 +149,13 @@ function buildStartSessionPayload(input: {
     };
   }
 
+  const versionInfo = getVersionInfo({ skip_fetch: true });
+  const updateHint = buildUpdateHint(versionInfo, input.locale ?? "ko");
+
   const loc = input.locale ?? "en";
   return {
+    version: serverVersion,
+    update: updateHint,
     sticky: stickyRes.sticky,
     sticky_path: stickyRes.path,
     alerts: usage.alerts,
@@ -178,7 +169,7 @@ function buildStartSessionPayload(input: {
       total_week: usage.total_week,
     },
     project_config_path: project.path,
-    recommend,
+    recommend: recommendVerbose,
     mcp_refresh: mcpRefreshSessionHint(),
     tip: "Prefer compact start_session. Weekly report: include_report=true or get_usage_summary.",
     ...(input.alias_of ? { alias_of: input.alias_of } : {}),
@@ -219,7 +210,7 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "start_session",
-    "작업 시작(compact): version + adopted model + alerts + optional recommend + run_hint.ko. Task model=primary_id. include_report/verbose로 report.",
+    "작업 게이트(compact): adopted_model + alerts + primary_id + must_do.task_model + stick + cost_advice + run_hint. task_description 필수(추천). verbose=전체.",
     startSessionArgs,
     async (args) =>
       jsonToolResult(

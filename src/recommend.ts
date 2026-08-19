@@ -1508,6 +1508,23 @@ const AGENT_NOTE = {
   en: "Run real work (Task/subagent) with primary_id — may differ from MCP caller. If unavailable → candidates[1].id. Never say sticky to user — use model_persistence.",
 } as const;
 
+/** Token-minimal gate payload for start_session (not recommend_model). */
+export function compactGateRecommend(
+  result: RecommendResult,
+): Record<string, unknown> {
+  const { cost_preview } = buildRecommendClarity(result);
+  const must_do = buildMustDo(result);
+  const run_hint = buildRunHint(result);
+  return {
+    primary_id: result.primary_id,
+    must_do: { task_model: must_do.task_model },
+    stick_action: result.stick_action ?? null,
+    model_persistence: result.model_persistence?.ko ?? null,
+    cost_advice: cost_preview.advice.ko,
+    run_hint: run_hint.ko,
+  };
+}
+
 /** Compact tool payload — default for agents (token-light) */
 export function compactRecommendResult(
   result: RecommendResult,

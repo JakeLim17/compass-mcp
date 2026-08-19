@@ -2,6 +2,10 @@
 
 Local MCP that reads what you're doing and suggests which model fits — copy tweak vs UI vs nasty bug, that kind of thing.
 
+## How it runs
+
+Each real task should pass through **`start_session`** (compact) once: cheap model by default, heavier only when the task needs it. Agents follow workspace rules to call it at work start; **Cursor does not auto-switch the chat dropdown** or intercept every message. Same task + `stick_action=keep` → no repeat recommend. Skip the gate for one-liners, greetings, or prompt-only tests.
+
 ## Install
 
 ```bash

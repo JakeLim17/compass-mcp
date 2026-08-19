@@ -13,6 +13,7 @@ import {
   MODEL_TIER,
   analyzeCommand,
   buildCostPreview,
+  compactGateRecommend,
   compactRecommendResult,
   costTierToWeight,
   recommendModel,
@@ -420,6 +421,29 @@ for (const ex of EXAMPLE_PROMPTS) {
     !("scores" in c) &&
     !("usage_estimate" in c);
   console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity + cost_preview`);
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+// gate session payload (start_session compact)
+{
+  const r = recommendModel({
+    task_description: "i18n 한 줄",
+    current_model: "composer-2.5-fast",
+  });
+  const g = compactGateRecommend(r);
+  const ok =
+    g.primary_id === r.primary_id &&
+    (g.must_do as { task_model?: string })?.task_model === r.primary_id &&
+    g.stick_action === "keep" &&
+    typeof g.cost_advice === "string" &&
+    (g.cost_advice as string).length > 0 &&
+    typeof g.run_hint === "string" &&
+    (g.run_hint as string).includes(r.primary_id) &&
+    !("candidates" in g) &&
+    !("clarity" in g) &&
+    !("reason" in g);
+  console.log(`[${ok ? "OK" : "FAIL"}] compactGateRecommend gate fields`);
   extraChecks += 1;
   if (!ok) failed += 1;
 }
