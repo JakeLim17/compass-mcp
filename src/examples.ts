@@ -34,8 +34,8 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     ko: "대시보드 레이아웃 리팩터하고 히어로 섹션 CSS 정리해줘",
     en: "Refactor the dashboard layout and clean up the hero section CSS",
     tags: ["ui"],
-    expected_primary: "Claude Sonnet",
-    note: "Save default → Sonnet. Quality expect / large redesign / premium → Fable (not the cheap primary).",
+    expected_primary: "Fable 5",
+    note: "Layout refactor → Fable. Hero copy/font only (no refactor) → Composer.",
   },
   {
     category: "ui",
@@ -89,6 +89,14 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
   // —— light patch / copy → host lightest (Cursor=Composer, Claude=Haiku) ——
   {
     category: "light_patch",
+    ko: "히어로 영어 슬로건 바꾸고 폰트 적용 고쳐줘",
+    en: "Change the hero English slogan and fix font application",
+    tags: ["ui"],
+    expected_primary: "Composer 2.5",
+    note: "UI keywords present but light copy/font → Composer, not Fable/Sonnet.",
+  },
+  {
+    category: "light_patch",
     ko: "로그인 문구 i18n 한 줄만 수정해줘",
     en: "Fix one i18n string on the login page",
     expected_primary: "Composer 2.5",
@@ -111,11 +119,11 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
   },
   {
     category: "recommend_again",
-    ko: "같은 대시보드 레이아웃 작업 이어서 — 모델 또 물어볼 필요 있어?",
-    en: "Continuing the same dashboard layout work — do I need to ask for a model again?",
+    ko: "같은 대시보드 레이아웃 리팩터 작업 이어서 — 모델 또 물어볼 필요 있어?",
+    en: "Continuing the same dashboard layout refactor — do I need to ask for a model again?",
     tags: ["ui"],
-    expected_primary: "Claude Sonnet",
-    note: "Same context → keep model; do not re-ask. Agents: don’t paste full MCP dumps.",
+    expected_primary: "Fable 5",
+    note: "Same dashboard layout refactor context → keep Fable.",
   },
 ];
 
@@ -123,7 +131,7 @@ export const EXAMPLE_PROMPTS_META = {
   model_persistence:
     "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Default avoids overspend — copy/i18n→host lightest, small patch→lightest, design competes (Fable/Grok/Opus/Sonnet), hard bug→Codex.",
+    "Default avoids overspend — copy/i18n/hero slogan/font→host lightest, layout UI refactor→Fable, hard bug→Codex.",
   design_primary_varies:
     "Design/planning primary is NOT fixed to Claude/Fable — scope & keywords pick among Fable, Grok, Opus, Sonnet. unavailable on host → candidates[1].",
   reading_recommendation:

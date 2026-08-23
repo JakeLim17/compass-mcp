@@ -53,15 +53,33 @@ const verboseSchema = z
   .optional()
   .describe("true면 긴 필드 포함. 기본 false(짧은 JSON)");
 
+const conversationContextSchema = z
+  .string()
+  .max(2000)
+  .optional()
+  .describe(
+    "직전 2~5턴 요약·원문(최대 2000자). task_description과 합쳐 작업 규모 분류",
+  );
+
+const contextFields = {
+  conversation_context: conversationContextSchema,
+  recent_turns: conversationContextSchema.describe(
+    "conversation_context 별칭 — 둘 다 있으면 병합",
+  ),
+};
+
 const startSessionArgs = {
   task_description: z
     .string()
     .optional()
-    .describe("있으면 recommend_model 퀵 실행"),
+    .describe(
+      "할 일. (문맥: …) → … 접두 또는 conversation_context와 함께 사용",
+    ),
   tags: z
     .array(tagSchema)
     .optional()
     .describe("선택: ui | bug | architecture | test"),
+  ...contextFields,
   host: hostSchema.describe("선택 host (없으면 project/env/cursor)"),
   cwd: z
     .string()
@@ -93,6 +111,8 @@ function jsonToolResult(payload: unknown, pretty = false) {
 
 function buildStartSessionPayload(input: {
   task_description?: string;
+  conversation_context?: string;
+  recent_turns?: string;
   tags?: Tag[];
   host?: string;
   cwd?: string;
@@ -116,6 +136,8 @@ function buildStartSessionPayload(input: {
   if (input.task_description?.trim()) {
     const result = recommendModel({
       task_description: input.task_description,
+      conversation_context: input.conversation_context,
+      recent_turns: input.recent_turns,
       tags: input.tags,
       current_model: stickyRes.sticky?.adopted_model,
       host: input.host,
@@ -247,11 +269,14 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "recommend_model",
-    "명령 문장 정독 → 작업에 맞는 모델. copy_task_model을 Task.model=에 필수 복사(말만 switch=위반). 이후 log_model_usage → set_sticky. verbose=true면 scores.",
+    "명령+대화 문맥 → 작업에 맞는 모델. conversation_context/recent_turns 또는 (문맥:…) 접두. copy_task_model을 Task.model=에 필수 복사.",
     {
       task_description: z
         .string()
-        .describe("할 일 문장 — 의도·범위·난이도 포함해서"),
+        .describe(
+          "이번 턴 요청 — 짧아도 됨. 문맥은 conversation_context 또는 (문맥:…) 접두",
+        ),
+      ...contextFields,
       tags: z
         .array(tagSchema)
         .optional()
@@ -264,7 +289,16 @@ export function createCompassMcpServer(): McpServer {
       cwd: z.string().optional().describe("project config 탐색 cwd"),
       verbose: verboseSchema,
     },
-    async ({ task_description, tags, current_model, host, cwd, verbose }) => {
+    async ({
+      task_description,
+      conversation_context,
+      recent_turns,
+      tags,
+      current_model,
+      host,
+      cwd,
+      verbose,
+    }) => {
       const stickyRes = getSticky();
       const project = loadProjectConfig({ startDir: cwd });
       const usage = getUsageSummary({
@@ -273,6 +307,8 @@ export function createCompassMcpServer(): McpServer {
       });
       const result = recommendModel({
         task_description,
+        conversation_context,
+        recent_turns,
         tags: tags as Tag[] | undefined,
         current_model: current_model?.trim() || stickyRes.sticky?.adopted_model,
         host,

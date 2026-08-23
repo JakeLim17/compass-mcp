@@ -18,6 +18,7 @@ import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
 import { buildMustDo } from "./mustDo.js";
 import { detectVerbalModelRequest } from "./verbalOverride.js";
+import { mergeTaskContext } from "./taskContext.js";
 
 export type ModelId =
   | "Composer 2.5"
@@ -196,6 +197,10 @@ const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
 
 export interface RecommendInput {
   task_description: string;
+  /** Recent 2–5 turn summary or raw excerpt (max ~2000 chars) */
+  conversation_context?: string;
+  /** Alias of conversation_context — merged if both set */
+  recent_turns?: string;
   tags?: Tag[];
   /** sticky: 현재 채택 모델(표시명 또는 Task slug). 있으면 stick_action 반환 */
   current_model?: string;
@@ -379,6 +384,12 @@ export interface RecommendResult {
   };
   /** Tier/work-kind dropped — agent must switch Task.model to primary_id */
   tier_switch?: boolean;
+  /** Conversation context used for classification */
+  context_meta?: {
+    has_context: boolean;
+    context_informed: boolean;
+    ambiguous_short: boolean;
+  };
 }
 
 const MODELS: ModelId[] = [
@@ -464,8 +475,12 @@ const KEYWORD_RULES: Array<{
     },
   },
   {
-    re: /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구/i,
+    re: /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|슬로건|slogan|cta\s*텍스트|hero\s*text/i,
     boost: { [LIGHTEST_LOGICAL]: 45 },
+  },
+  {
+    re: /font|글꼴|폰트|typography|font-family|fontFamily/i,
+    boost: { [LIGHTEST_LOGICAL]: 32, "Claude Sonnet": -6, "Fable 5": -8 },
   },
   {
     re: /주석|lint|작은|퀵|핫픽스|한\s*줄|one[- ]?line/i,
@@ -497,7 +512,7 @@ const HIGH_TOKEN_RE =
 
 /** Small/cheap jobs — quality-first stays on Composer naturally */
 const LOW_TOKEN_RE =
-  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*수정|작은\s*(수정|패치|카피|문구)|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄/i;
+  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*수정|작은\s*(수정|패치|카피|문구)|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|슬로건|slogan|폰트|글꼴|font|히어로\s*영어|영어\s*슬로건/i;
 
 /** Hard debug / CI — keep Terra/Codex even when tokens are high */
 const HARD_BUG_RE =
@@ -624,7 +639,27 @@ const LARGE_UI_RE =
 
 /** Copy/i18n/typo only — host lightest tier (not mid models) */
 export const COPY_ONLY_RE =
-  /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|문구\s*만|카피\s*만/i;
+  /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|문구\s*만|카피\s*만|슬로건|slogan|cta\s*텍스트|cta\s*문구|hero\s*text|subtitle|서브타이틀/i;
+
+/** Hero/landing copy tweaks — still light tier even when UI keywords appear */
+export const LIGHT_COPY_RE =
+  /슬로건|slogan|영어\s+(문구|슬로건|텍스트|카피)|hero\s*(text|copy|slogan)|히어로\s*(영어|문구|텍스트|슬로건|카피)|cta\s*(텍스트|문구|버튼)|랜딩\s*문구|headline|tagline/i;
+
+/** Font/typography apply bug — narrow style fix, not layout refactor */
+export const FONT_FIX_RE =
+  /font|글꼴|폰트|typography|타이포그래피|font-family|fontFamily|글꼴\s*(적용|안\s*먹|수정|고)|폰트\s*(적용|안\s*먹|수정|고)/i;
+
+/** Hero/CTA text-only scope — not a layout job */
+export const NARROW_UI_RE =
+  /히어로\s*(섹션\s*)?(문구|텍스트|영어|슬로건|카피)\s*만|cta\s*(텍스트|문구)\s*만|hero\s*(section\s*)?(text|copy|slogan)\s*only|랜딩\s*문구\s*만|히어로\s*영어|영어\s*슬로건/i;
+
+/** Short fix verbs + tiny UI scope */
+export const NARROW_FIX_RE =
+  /(?:수정|고쳐|적용|바꿔|fix|change).{0,24}(?:font|폰트|글꼴|문구|슬로건|영어|i18n|카피|cta)|(?:font|폰트|글꼴).{0,24}(?:수정|고쳐|적용|안\s*먹|fix|apply)/i;
+
+/** Dashboard / layout refactor — Fable-tier multi-file UI */
+export const UI_LAYOUT_REFACTOR_RE =
+  /레이아웃\s*리팩터|layout\s*refactor|대시보드\s*레이아웃\s*(?:리팩터|개편|구조)|ui\s*리팩터|컴포넌트\s*구조\s*(변경|리팩터)|멀티\s*파일\s*ui|화면\s*구조\s*개편|design\s*system\s*정리/i;
 
 const TINY_SCOPE_RE =
   /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*만|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|작은\s*(수정|패치)/i;
@@ -639,6 +674,7 @@ export function isLightPatchCommand(
 ): boolean {
   return (
     signals.copy_only ||
+    signals.light_ui_copy ||
     signals.scope === "tiny" ||
     FOLLOW_UP_LIGHT_RE.test(text ?? "")
   );
@@ -676,14 +712,57 @@ export function isCopyOnlyTask(text: string): boolean {
   return COPY_ONLY_RE.test(text ?? "");
 }
 
+/** Hero copy / font apply / narrow CTA — Composer even when UI keywords present */
+export function isLightUiCopyOrFontTask(text: string, tags: Tag[] = []): boolean {
+  const t = text ?? "";
+  if (isCopyOnlyTask(t)) return true;
+  if (UI_LAYOUT_REFACTOR_RE.test(t) || LARGE_UI_RE.test(t)) return false;
+  if (NARROW_UI_RE.test(t)) return true;
+  if (LIGHT_COPY_RE.test(t) && !/(리팩터|refactor|레이아웃|layout|전면|멀티|design\s*system)/i.test(t)) {
+    return true;
+  }
+  if (
+    FONT_FIX_RE.test(t) &&
+    !/(리팩터|refactor|레이아웃|layout|전면|멀티|design\s*system|컴포넌트\s*구조)/i.test(t)
+  ) {
+    return true;
+  }
+  if (NARROW_FIX_RE.test(t)) return true;
+  if (
+    /히어로|hero/i.test(t) &&
+    (LIGHT_COPY_RE.test(t) || FONT_FIX_RE.test(t) || COPY_ONLY_RE.test(t)) &&
+    /(수정|고쳐|적용|바꿔|change|fix)/i.test(t) &&
+    !/(리팩터|refactor|레이아웃|layout|전면|멀티)/i.test(t)
+  ) {
+    return true;
+  }
+  void tags;
+  return false;
+}
+
+/** Multi-file / layout UI refactor — keep Fable tier */
+export function isUiLayoutRefactorTask(text: string, tags: Tag[] = []): boolean {
+  const t = text ?? "";
+  if (isLightUiCopyOrFontTask(t, tags)) return false;
+  return (
+    UI_LAYOUT_REFACTOR_RE.test(t) ||
+    (tags.includes("ui") &&
+      /리팩터|refactor|멀티\s*파일|컴포넌트\s*구조|design\s*system|화면\s*구조\s*개편|레이아웃\s*(?:리팩터|개편|구조)|layout\s*refactor/i.test(
+        t,
+      ))
+  );
+}
+
 /** Light / copy / tiny — prefer Standard tier in chat UI (not Fast) */
 export function prefersStandardUi(signals: CommandSignals): boolean {
   return (
     signals.copy_only ||
+    signals.light_ui_copy ||
     signals.scope === "tiny" ||
     (signals.scope === "local" &&
       !signals.hard_bug &&
       !signals.large_ui &&
+      !signals.ui_layout_refactor &&
       !signals.architecture)
   );
 }
@@ -739,13 +818,33 @@ export interface CommandSignals {
   implementation: boolean;
   /** i18n/copy/typo — host lightest tier, not Sonnet/Fable */
   copy_only: boolean;
+  /** Hero slogan / font apply / narrow CTA — Composer wins over UI tag */
+  light_ui_copy: boolean;
+  /** Dashboard layout refactor / multi-file UI — Fable tier */
+  ui_layout_refactor: boolean;
+  /** Prior turns drove copy/layout classification */
+  context_informed: boolean;
+  /** Short task with no context — conservative Composer */
+  ambiguous_short: boolean;
   /** One-line WHY for reason field */
   why: string;
 }
 
-export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
+export interface AnalyzeCommandOpts {
+  /** Current turn only — length / ambiguous-short detection */
+  taskText?: string;
+  hasContext?: boolean;
+}
+
+export function analyzeCommand(
+  text: string,
+  tags: Tag[] = [],
+  opts?: AnalyzeCommandOpts,
+): CommandSignals {
   const t = text ?? "";
-  const char_len = t.trim().length;
+  const taskOnly = (opts?.taskText ?? text ?? "").trim();
+  const char_len = taskOnly.length;
+  const hasContext = !!opts?.hasContext;
   const hard_bug = isHardBugTask(t, tags);
   const ui = isUiTask(t, tags);
   const architecture =
@@ -753,20 +852,54 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정|기획|계획/i.test(t);
   const implementation = isImplementationTask(t);
   const copy_only = isCopyOnlyTask(t);
+  const light_ui_copy =
+    isLightUiCopyOrFontTask(t, tags) &&
+    (LIGHT_COPY_RE.test(t) ||
+      FONT_FIX_RE.test(t) ||
+      NARROW_UI_RE.test(t) ||
+      NARROW_FIX_RE.test(t) ||
+      (/히어로|hero/i.test(t) &&
+        /(수정|고쳐|적용|바꿔|change|fix)/i.test(t)));
+  const ui_layout_refactor = isUiLayoutRefactorTask(t, tags);
   const follow_up_light =
     FOLLOW_UP_LIGHT_RE.test(t) && !hard_bug && !architecture;
-  const large_ui = ui && (LARGE_UI_RE.test(t) || (BROAD_SCOPE_RE.test(t) && ui));
+  const large_ui =
+    ui &&
+    !light_ui_copy &&
+    (LARGE_UI_RE.test(t) || (BROAD_SCOPE_RE.test(t) && ui));
 
   let budget: CommandBudget = "neutral";
   if (PREMIUM_BUDGET_RE.test(t)) budget = "premium";
   else if (SAVE_BUDGET_RE.test(t)) budget = "save";
 
   let scope: CommandScope = "local";
-  if (TINY_SCOPE_RE.test(t) || follow_up_light) scope = "tiny";
+  if (TINY_SCOPE_RE.test(t) || follow_up_light || light_ui_copy) scope = "tiny";
   else if (/수천|수백\s*파일|entire\s*codebase|whole\s*codebase/i.test(t))
     scope = "huge";
   else if (BROAD_SCOPE_RE.test(t) || char_len > 160) scope = "broad";
-  else if (char_len < 18 && !ui && !hard_bug && !architecture) scope = "tiny";
+  else if (char_len < 18 && !ui && !hard_bug && !architecture && !hasContext)
+    scope = "tiny";
+
+  const taskOnlyLight =
+    isLightUiCopyOrFontTask(taskOnly, tags) ||
+    isCopyOnlyTask(taskOnly) ||
+    isUiLayoutRefactorTask(taskOnly, tags);
+  const classifyLight =
+    isLightUiCopyOrFontTask(t, tags) ||
+    isCopyOnlyTask(t) ||
+    isUiLayoutRefactorTask(t, tags);
+  const context_informed =
+    hasContext && classifyLight && !taskOnlyLight;
+  const ambiguous_short =
+    !hasContext &&
+    char_len > 0 &&
+    char_len < 16 &&
+    !hard_bug &&
+    !architecture &&
+    !ui_layout_refactor &&
+    !large_ui &&
+    !copy_only &&
+    !light_ui_copy;
 
   let why: string;
   if (budget === "premium") {
@@ -777,10 +910,22 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     why = "설계·기획·트레이드오프 → Fable/Grok/Opus/Sonnet 경쟁";
   } else if (architecture && implementation) {
     why = "설계+구현 혼합 → 구현 신호 우선(Composer/UI면 Fable)";
+  } else if (context_informed && light_ui_copy) {
+    why = "대화 문맥(히어로·폰트·슬로건) → Composer — 이번 턴 키워드 없어도 light tier";
+  } else if (context_informed && ui_layout_refactor) {
+    why = "대화 문맥(레이아웃·리팩터) → Fable — 이번 턴 키워드 없어도 UI refactor";
+  } else if (context_informed && copy_only) {
+    why = "대화 문맥(i18n·카피) → Composer lightest";
+  } else if (ambiguous_short) {
+    why = "짧은 요청·문맥 없음 → 보수적으로 Composer";
+  } else if (ui_layout_refactor) {
+    why = "레이아웃·멀티파일 UI 리팩터 → Fable";
   } else if (large_ui) {
     why = "넓은 UI 리디자인 → Fable 에스컬레이션";
   } else if (copy_only) {
     why = "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
+  } else if (light_ui_copy) {
+    why = "히어로 문구·폰트·슬로건 → Composer (UI 키워드만으로 Fable/Sonnet 금지)";
   } else if (follow_up_light || scope === "tiny" || TINY_SCOPE_RE.test(t)) {
     why = "짧은 후속·작은 패치 → lightest tier (호스트별 id)";
   } else if (ui) {
@@ -801,6 +946,10 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     ui,
     implementation,
     copy_only,
+    light_ui_copy,
+    ui_layout_refactor,
+    context_informed,
+    ambiguous_short,
     why,
   };
 }
@@ -995,21 +1144,34 @@ function buildCostAdvice(
     primary === "Claude Opus" ||
     primary === "Fable 5";
 
-  if (light && (signals.copy_only || signals.scope === "tiny" || signals.scope === "local")) {
+  if (
+    light &&
+    (signals.copy_only ||
+      signals.light_ui_copy ||
+      signals.scope === "tiny" ||
+      signals.scope === "local")
+  ) {
     const label = hostLightestLabel(host);
     const standardHint =
       host === "cursor" || resolveHostId(host) === "cursor"
         ? " — Composer 2.5 **Standard**(Fast 아님, ≈6× 저렴)"
         : "";
-    return signals.copy_only
-      ? {
-          ko: `문구/i18n/타이포 → lightest (${label})${standardHint} — Sonnet/Fable/Codex는 과함`,
-          en: `Copy/i18n/typo → lightest (${label})${standardHint.replace("Standard", "Standard tier")} — Sonnet/Fable/Codex overkill`,
-        }
-      : {
-          ko: `작은 패치 → lightest tier${standardHint} — Codex·Fable·Fast는 과함`,
-          en: `Small patch → lightest tier${standardHint} — Codex/Fable/Fast overkill`,
-        };
+    if (signals.light_ui_copy) {
+      return {
+        ko: `히어로 문구·폰트·슬로건 → lightest (${label})${standardHint} — Fable/Sonnet/Codex는 과함`,
+        en: `Hero copy/font/slogan → lightest (${label})${standardHint.replace("Standard", "Standard tier")} — Fable/Sonnet/Codex overkill`,
+      };
+    }
+    if (signals.copy_only) {
+      return {
+        ko: `문구/i18n/타이포 → lightest (${label})${standardHint} — Sonnet/Fable/Codex는 과함`,
+        en: `Copy/i18n/typo → lightest (${label})${standardHint.replace("Standard", "Standard tier")} — Sonnet/Fable/Codex overkill`,
+      };
+    }
+    return {
+      ko: `작은 패치 → lightest tier${standardHint} — Codex·Fable·Fast는 과함`,
+      en: `Small patch → lightest tier${standardHint} — Codex/Fable/Fast overkill`,
+    };
   }
   if (
     signals.architecture &&
@@ -1030,20 +1192,23 @@ function buildCostAdvice(
       en: "Sonnet is a good fit — reserve Fable/Codex for large UI or hard bugs",
     };
   }
-  if (primary === "Fable 5" && signals.large_ui) {
+  if (
+    primary === "Fable 5" &&
+    (signals.large_ui || signals.ui_layout_refactor)
+  ) {
     return {
-      ko: signals.large_ui
-        ? "넓은 UI엔 Fable 적합 — 작은 패치면 Composer/Sonnet"
-        : "Fable은 UI·멀티파일용 — 작은 수정이면 Composer/Sonnet",
-      en: signals.large_ui
-        ? "Fable fits broad UI — Composer/Sonnet for small patches"
-        : "Fable for UI/multi-file — Composer/Sonnet for tiny edits",
+      ko: signals.ui_layout_refactor
+        ? "레이아웃·멀티파일 UI 리팩터에 Fable 적합 — 히어로 문구·폰트만이면 Composer"
+        : "넓은 UI엔 Fable 적합 — 작은 패치면 Composer/Sonnet",
+      en: signals.ui_layout_refactor
+        ? "Fable fits layout/multi-file UI refactor — hero copy/font only → Composer"
+        : "Fable fits broad UI — Composer/Sonnet for small patches",
     };
   }
   if (primary === "Fable 5") {
     return {
-      ko: "UI·멀티파일에 Fable 적합 — 가벼운 패치면 Composer/Sonnet",
-      en: "Fable fits UI/multi-file — Composer/Sonnet for light patches",
+      ko: "UI·멀티파일에 Fable 적합 — 히어로 문구·폰트·i18n은 Composer",
+      en: "Fable fits UI/multi-file — hero copy/font/i18n → Composer",
     };
   }
   if (primary === "Grok 5.x") {
@@ -1246,12 +1411,21 @@ function ensureNotBlocked(
 }
 
 export function recommendModel(input: RecommendInput): RecommendResult {
-  const text = input.task_description ?? "";
+  const merged = mergeTaskContext({
+    task_description: input.task_description ?? "",
+    conversation_context: input.conversation_context,
+    recent_turns: input.recent_turns,
+  });
+  const text = merged.classifyText;
+  const taskText = merged.task;
   const tags = input.tags ?? [];
   const cfg = input.project_config;
   const hostRaw = input.host ?? cfg?.preferred_host;
   const host = resolveHostId(hostRaw);
-  const signals = analyzeCommand(text, tags);
+  const signals = analyzeCommand(text, tags, {
+    taskText,
+    hasContext: merged.hasContext,
+  });
   const token_risk = estimateTokenRisk(text, tags);
   const hardBug = signals.hard_bug;
   const uiTask = signals.ui;
@@ -1259,11 +1433,21 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const scores: Record<ModelId, number> = { ...BASE };
 
   for (const tag of tags) {
+    if (tag === "ui" && signals.light_ui_copy) continue;
     const boost = TAG_BOOST[tag];
     if (boost) addScores(scores, boost);
   }
   for (const rule of KEYWORD_RULES) {
-    if (rule.re.test(text)) addScores(scores, rule.boost);
+    if (!rule.re.test(text)) continue;
+    if (
+      signals.light_ui_copy &&
+      /ui|ux|디자인|화면|레이아웃|프론트|css|스타일|컴포넌트|랜딩|히어로/i.test(
+        rule.re.source,
+      )
+    ) {
+      continue;
+    }
+    addScores(scores, rule.boost);
   }
 
   // Scope nudges from command length / verbs
@@ -1298,11 +1482,25 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores["Fable 5"] -= 10;
   }
 
-  // Default save + normal UI: Sonnet over Fable (unless large redesign)
-  if (prefer_cheaper && uiTask && !hardBug && !signals.large_ui) {
+  // Default save + normal UI: Sonnet over Fable (unless large redesign / layout refactor / light copy)
+  if (
+    prefer_cheaper &&
+    uiTask &&
+    !hardBug &&
+    !signals.large_ui &&
+    !signals.light_ui_copy &&
+    !signals.ui_layout_refactor
+  ) {
     scores["Claude Sonnet"] += 40;
     scores["Fable 5"] -= 25;
     scores["Composer 2.5"] += 8;
+  }
+
+  // Layout refactor / multi-file UI → Fable
+  if (signals.ui_layout_refactor && !hardBug) {
+    scores["Fable 5"] += 55;
+    scores["Claude Sonnet"] += 8;
+    scores["Composer 2.5"] -= 12;
   }
 
   // Clear escalate: large UI redesign → Fable
@@ -1335,11 +1533,23 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     }
   }
 
-  // Copy/i18n/typo → host lightest logical role
-  if (signals.copy_only && !hardBug && !blocked.has(LIGHTEST_LOGICAL)) {
-    scores[LIGHTEST_LOGICAL] += 40;
-    scores["Fable 5"] -= 12;
+  // Copy/i18n/typo / hero slogan / font apply → host lightest logical role
+  if (
+    (signals.copy_only || signals.light_ui_copy) &&
+    !hardBug &&
+    !blocked.has(LIGHTEST_LOGICAL)
+  ) {
+    scores[LIGHTEST_LOGICAL] += signals.light_ui_copy ? 65 : 40;
+    scores["Fable 5"] -= signals.light_ui_copy ? 35 : 12;
+    scores["Claude Sonnet"] -= signals.light_ui_copy ? 30 : 0;
     scores["GPT-5 Codex"] -= 10;
+  }
+
+  // Short request without context — conservative Composer
+  if (signals.ambiguous_short && !hardBug && !blocked.has(LIGHTEST_LOGICAL)) {
+    scores[LIGHTEST_LOGICAL] += 40;
+    scores["Fable 5"] -= 25;
+    scores["Claude Sonnet"] -= 20;
   }
 
   const pureDesign =
@@ -1359,7 +1569,11 @@ export function recommendModel(input: RecommendInput): RecommendResult {
 
   let [primary, alternative] = topTwo(scores);
 
-  if (signals.copy_only && !hardBug && !blocked.has(LIGHTEST_LOGICAL)) {
+  if (
+    (signals.copy_only || signals.light_ui_copy || signals.ambiguous_short) &&
+    !hardBug &&
+    !blocked.has(LIGHTEST_LOGICAL)
+  ) {
     if (primary !== LIGHTEST_LOGICAL) {
       alternative = primary;
       primary = LIGHTEST_LOGICAL;
@@ -1375,14 +1589,24 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       alternative = primary === bugPrimary ? alternative : primary;
       primary = bugPrimary;
     }
-  } else if (signals.large_ui && !hardBug && !blocked.has("Fable 5")) {
+  } else if (
+    (signals.ui_layout_refactor || signals.large_ui) &&
+    !hardBug &&
+    !blocked.has("Fable 5")
+  ) {
     if (primary !== "Fable 5") {
       alternative = primary;
       primary = "Fable 5";
     }
   } else if (prefer_cheaper) {
     // UI quality-cheap: Sonnet (or Composer if Sonnet blocked)
-    if (uiTask && !hardBug && !signals.large_ui) {
+    if (
+      uiTask &&
+      !hardBug &&
+      !signals.large_ui &&
+      !signals.ui_layout_refactor &&
+      !signals.light_ui_copy
+    ) {
       // 일반 UI = Sonnet (절약). Sonnet 불가 시 Composer.
       let qualityCheap: ModelId = blocked.has("Claude Sonnet")
         ? "Composer 2.5"
@@ -1441,7 +1665,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     hardBug,
   });
 
-  const verbal = detectVerbalModelRequest(text);
+  const verbal = detectVerbalModelRequest(taskText);
   let verbalApplied = false;
   let verbalUnavailable = false;
   if (verbal) {
@@ -1483,7 +1707,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       currentResolved,
       primary,
       signals,
-      text,
+      taskText,
     );
     if (designToImpl || tier_switch) {
       stick_action = "switch";
@@ -1580,6 +1804,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
             label: verbal.label,
             applied: verbalApplied,
             ...(verbalApplied ? { one_shot: true as const } : {}),
+          },
+        }
+      : {}),
+    ...(merged.hasContext
+      ? {
+          context_meta: {
+            has_context: true,
+            context_informed: signals.context_informed,
+            ambiguous_short: signals.ambiguous_short,
           },
         }
       : {}),
@@ -1716,6 +1949,9 @@ export function compactGateRecommend(
     model_persistence: result.model_persistence?.ko ?? null,
     cost_advice: cost_preview.advice.ko,
     run_hint: run_hint.ko,
+    ...(result.context_meta?.context_informed
+      ? { context_informed: true }
+      : {}),
     ...(result.tier_switch ? { tier_switch: true } : {}),
     ...(result.verbal_override?.one_shot ? { verbal_one_shot: true } : {}),
     ...(result.ui_recommended_id

@@ -71,12 +71,29 @@ const cases: Case[] = [
     expectPreferCheaper: true,
   },
   {
-    name: "UI 태그 → Sonnet(절약 기본)",
+    name: "UI 태그 → Fable(레이아웃 리팩터)",
     input: { task_description: "대시보드 레이아웃 리팩터", tags: ["ui"] },
-    expectPrimary: "Claude Sonnet",
-    expectCost: "medium",
+    expectPrimary: "Fable 5",
+    expectCost: "medium-high",
     expectPreferCheaper: true,
-    expectFallback: "Composer 2.5",
+    expectFallback: "Claude Opus",
+  },
+  {
+    name: "히어로 슬로건+폰트 → Composer",
+    input: { task_description: "히어로 영어 슬로건 바꾸고 폰트 적용 고쳐줘" },
+    expectPrimary: "Composer 2.5",
+    expectCost: "low",
+    expectPreferCheaper: true,
+  },
+  {
+    name: "히어로 영어·폰트 ui태그 → Composer",
+    input: {
+      task_description: "히어로 영어·폰트 적용 수정",
+      tags: ["ui"],
+    },
+    expectPrimary: "Composer 2.5",
+    expectCost: "low",
+    expectPreferCheaper: true,
   },
   {
     name: "넓은 UI 리디자인 → Fable",
@@ -161,7 +178,7 @@ const cases: Case[] = [
       tags: ["ui"],
       current_model: "Composer 2.5",
     },
-    expectPrimary: "Claude Sonnet",
+    expectPrimary: "Fable 5",
     expectStick: "switch",
   },
   {
@@ -198,15 +215,15 @@ const cases: Case[] = [
     expectFallback: "Composer 2.5",
   },
   {
-    name: "cost_bias cheap UI → Sonnet",
+    name: "cost_bias cheap UI layout → Fable",
     input: {
       task_description: "대시보드 레이아웃 리팩터",
       tags: ["ui"],
       project_config: { cost_bias: "prefer_cheaper" },
     },
-    expectPrimary: "Claude Sonnet",
+    expectPrimary: "Fable 5",
     expectPreferCheaper: true,
-    expectFallback: "Composer 2.5",
+    expectFallback: "Claude Opus",
   },
   {
     name: "premium UI → Fable",
@@ -284,6 +301,68 @@ const cases: Case[] = [
 
 let failed = 0;
 let extraChecks = 0;
+
+/** light copy/font vs layout refactor regression */
+{
+  const hero = recommendModel({
+    task_description: "히어로 영어 슬로건 바꾸고 폰트 적용 고쳐줘",
+    tags: ["ui"],
+  });
+  const layout = recommendModel({
+    task_description: "대시보드 레이아웃 리팩터",
+    tags: ["ui"],
+  });
+  const i18n = recommendModel({ task_description: "로그인 문구 i18n 한 줄" });
+  const heroSignals = analyzeCommand(
+    "히어로 영어 슬로건 바꾸고 폰트 적용 고쳐줘",
+    ["ui"],
+  );
+  const ok =
+    hero.primary === "Composer 2.5" &&
+    heroSignals.light_ui_copy === true &&
+    layout.primary === "Fable 5" &&
+    i18n.primary === "Composer 2.5" &&
+    hero.cost_preview.advice.ko.includes("히어로") &&
+    hero.cost_preview.advice.ko.includes("Fable");
+  console.log(
+    `[${ok ? "OK" : "FAIL"}] light_ui_copy hero=${hero.primary} layout=${layout.primary} i18n=${i18n.primary}`,
+  );
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+/** conversation_context — short task + prior hero/font context */
+{
+  const ctx = recommendModel({
+    task_description: "영어로 바꿔줘",
+    conversation_context:
+      "히어로 영어 슬로건 논의 중. 설정 글꼴이 hero 섹션에 적용 안 됨.",
+  });
+  const bare = recommendModel({ task_description: "영어로 바꿔줘" });
+  const embedded = recommendModel({
+    task_description:
+      "(문맥: 히어로 슬로건·폰트 적용 안 됨) → 영어로 바꿔줘",
+  });
+  const layoutCtx = recommendModel({
+    task_description: "이어서 진행해줘",
+    conversation_context:
+      "대시보드 전체 레이아웃 리팩터 논의. 여러 컴포넌트 구조 변경 예정",
+    tags: ["ui"],
+  });
+  const ok =
+    ctx.primary === "Composer 2.5" &&
+    ctx.context_meta?.context_informed === true &&
+    bare.primary === "Composer 2.5" &&
+    bare.context_meta == null &&
+    embedded.primary === "Composer 2.5" &&
+    layoutCtx.primary === "Fable 5" &&
+    layoutCtx.context_meta?.context_informed === true;
+  console.log(
+    `[${ok ? "OK" : "FAIL"}] conversation_context ctx=${ctx.primary} bare=${bare.primary} layoutCtx=${layoutCtx.primary}`,
+  );
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
 
 /** Fable verbal one-shot → light follow-up (regression) */
 {
