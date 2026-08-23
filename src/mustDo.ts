@@ -28,6 +28,11 @@ export function buildMustDo(result: RecommendResult): MustDoChecklist {
     : result.ui_recommended_note?.ko
       ? result.ui_recommended_note.ko
       : null;
+  const stickyLine = result.verbal_override?.one_shot
+    ? "말 지정 one-shot — set_sticky 생략(또는 scope=verbal_one_shot). 다음 light 턴은 switch"
+    : result.tier_switch
+      ? `tier_switch — set_sticky는 ${result.primary_id}로만(이전 heavy 유지 금지)`
+      : "log_model_usage → set_sticky";
   return {
     task_model: result.primary_id,
     fallback_model: fallback,
@@ -38,7 +43,8 @@ export function buildMustDo(result: RecommendResult): MustDoChecklist {
       "model 생략·말만 「추천으로 다시」=위반 (Composer 잔류)",
       `Multitask 부모도 model=${result.primary_id}`,
       `unavailable → ${fallback}`,
-      "log_model_usage → set_sticky",
+      stickyLine,
+      "stick_action=keep는 같은 tier·같은 작업 종류만 — light 후속은 switch",
       "주인님껀 model_persistence만 (sticky 단어 금지)",
     ],
     en: [

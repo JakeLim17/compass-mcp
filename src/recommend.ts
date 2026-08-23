@@ -374,7 +374,11 @@ export interface RecommendResult {
     requested: ModelId;
     label: string;
     applied: boolean;
+    /** 말 지정은 이번 턴만 — set_sticky 영구 저장 금지 */
+    one_shot?: boolean;
   };
+  /** Tier/work-kind dropped — agent must switch Task.model to primary_id */
+  tier_switch?: boolean;
 }
 
 const MODELS: ModelId[] = [
@@ -625,6 +629,49 @@ export const COPY_ONLY_RE =
 const TINY_SCOPE_RE =
   /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*만|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|작은\s*(수정|패치)/i;
 
+/** Short follow-up in same chat — treat as light tier (no keep on Fable/Codex) */
+export const FOLLOW_UP_LIGHT_RE =
+  /여기도\s*(고|수정|바꿔|해)?|이것도|거기도|마저|문구\s*만|카피\s*만|타이포\s*만|간단\s*(히|하게)?|짧게|후속\s*(명령|작업)?/i;
+
+export function isLightPatchCommand(
+  signals: CommandSignals,
+  text: string,
+): boolean {
+  return (
+    signals.copy_only ||
+    signals.scope === "tiny" ||
+    FOLLOW_UP_LIGHT_RE.test(text ?? "")
+  );
+}
+
+function modelTierRank(tier: ModelTier): number {
+  if (tier === "low") return 0;
+  if (tier === "mid") return 1;
+  return 2;
+}
+
+/** Sticky was heavy; new command is lighter — never keep expensive model */
+export function shouldForceTierSwitch(
+  current: ModelId,
+  primary: ModelId,
+  signals: CommandSignals,
+  text: string,
+): boolean {
+  if (current === primary) return false;
+  const down =
+    modelTierRank(MODEL_TIER[current]) > modelTierRank(MODEL_TIER[primary]);
+  if (down && isLightPatchCommand(signals, text)) return true;
+  if (down && signals.scope === "tiny") return true;
+  if (
+    current !== LIGHTEST_LOGICAL &&
+    primary === LIGHTEST_LOGICAL &&
+    isLightPatchCommand(signals, text)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function isCopyOnlyTask(text: string): boolean {
   return COPY_ONLY_RE.test(text ?? "");
 }
@@ -706,6 +753,8 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정|기획|계획/i.test(t);
   const implementation = isImplementationTask(t);
   const copy_only = isCopyOnlyTask(t);
+  const follow_up_light =
+    FOLLOW_UP_LIGHT_RE.test(t) && !hard_bug && !architecture;
   const large_ui = ui && (LARGE_UI_RE.test(t) || (BROAD_SCOPE_RE.test(t) && ui));
 
   let budget: CommandBudget = "neutral";
@@ -713,7 +762,7 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
   else if (SAVE_BUDGET_RE.test(t)) budget = "save";
 
   let scope: CommandScope = "local";
-  if (TINY_SCOPE_RE.test(t)) scope = "tiny";
+  if (TINY_SCOPE_RE.test(t) || follow_up_light) scope = "tiny";
   else if (/수천|수백\s*파일|entire\s*codebase|whole\s*codebase/i.test(t))
     scope = "huge";
   else if (BROAD_SCOPE_RE.test(t) || char_len > 160) scope = "broad";
@@ -732,8 +781,8 @@ export function analyzeCommand(text: string, tags: Tag[] = []): CommandSignals {
     why = "넓은 UI 리디자인 → Fable 에스컬레이션";
   } else if (copy_only) {
     why = "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
-  } else if (scope === "tiny" || TINY_SCOPE_RE.test(t)) {
-    why = "작은 패치 → lightest tier (호스트별 id)";
+  } else if (follow_up_light || scope === "tiny" || TINY_SCOPE_RE.test(t)) {
+    why = "짧은 후속·작은 패치 → lightest tier (호스트별 id)";
   } else if (ui) {
     why = "일반 UI → Sonnet(절약 기본, Fable 보류)";
   } else if (scope === "broad" || scope === "huge") {
@@ -1428,8 +1477,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const fallback_chain = candidates.map((c) => c.slug || c.id);
 
   let stick_action: "keep" | "switch" | undefined;
+  let tier_switch = false;
   if (currentResolved != null) {
-    if (designToImpl) {
+    tier_switch = shouldForceTierSwitch(
+      currentResolved,
+      primary,
+      signals,
+      text,
+    );
+    if (designToImpl || tier_switch) {
       stick_action = "switch";
     } else if (currentResolved === primary) {
       stick_action = "keep";
@@ -1453,7 +1509,9 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   if (stick_action === "keep") {
     reason = `모델 유지 · ${reason}`;
   } else if (stick_action === "switch") {
-    reason = `${primary}로 전환 · ${reason}`;
+    reason = tier_switch
+      ? `작업 경량화 → ${primary}로 전환 · ${reason}`
+      : `${primary}로 전환 · ${reason}`;
   }
 
   const model_persistence =
@@ -1521,9 +1579,11 @@ export function recommendModel(input: RecommendInput): RecommendResult {
             requested: verbal.model,
             label: verbal.label,
             applied: verbalApplied,
+            ...(verbalApplied ? { one_shot: true as const } : {}),
           },
         }
       : {}),
+    ...(tier_switch ? { tier_switch: true as const } : {}),
     ...(stick_action
       ? {
           stick_action,
@@ -1617,13 +1677,18 @@ export function buildRunHint(result: RecommendResult): {
     : result.ui_recommended_note?.en
       ? `${result.ui_recommended_note.en} · `
       : "";
+  const stickyKo = result.verbal_override?.one_shot
+    ? "set_sticky 생략(one-shot)"
+    : result.tier_switch
+      ? `set_sticky=${result.primary_id}`
+      : "set_sticky";
   return {
     task_model: result.primary_id,
     fallback_model: fb,
     task_model_required: true,
     ...(ui ? { ui_model: ui } : {}),
-    ko: `${uiKo}Task.model=${result.primary_id} 필수(말만 switch=위반; 불가 시 ${fb}) → log_model_usage → set_sticky`,
-    en: `${uiEn}Task.model=${result.primary_id} required (talk-only switch=violation; if unavailable ${fb}) → log_model_usage → set_sticky`,
+    ko: `${uiKo}Task.model=${result.primary_id} 필수(말만 switch=위반; 불가 시 ${fb}) → log_model_usage → ${stickyKo}`,
+    en: `${uiEn}Task.model=${result.primary_id} required (talk-only switch=violation; if unavailable ${fb}) → log_model_usage → ${stickyKo.replace("생략", "skip")}`,
   };
 }
 
@@ -1651,6 +1716,8 @@ export function compactGateRecommend(
     model_persistence: result.model_persistence?.ko ?? null,
     cost_advice: cost_preview.advice.ko,
     run_hint: run_hint.ko,
+    ...(result.tier_switch ? { tier_switch: true } : {}),
+    ...(result.verbal_override?.one_shot ? { verbal_one_shot: true } : {}),
     ...(result.ui_recommended_id
       ? { ui_recommended_id: result.ui_recommended_id }
       : {}),

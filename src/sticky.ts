@@ -11,12 +11,15 @@ export interface StickyState {
   host?: string;
   updated_at: string;
   context_hint?: string;
+  /** verbal_one_shot = 이번 말 지정만, 다음 light 턴은 switch */
+  scope?: "task_stream" | "verbal_one_shot";
 }
 
 export interface SetStickyInput {
   adopted_model: string;
   host?: string;
   context_hint?: string;
+  scope?: "task_stream" | "verbal_one_shot";
 }
 
 export function getSticky(opts?: {
@@ -51,6 +54,7 @@ export function setSticky(
     ...(input.context_hint?.trim()
       ? { context_hint: input.context_hint.trim().slice(0, 200) }
       : {}),
+    ...(input.scope ? { scope: input.scope } : {}),
   };
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(sticky, null, 2)}\n`, "utf8");

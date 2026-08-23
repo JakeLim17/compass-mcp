@@ -254,6 +254,24 @@ const cases: Case[] = [
     expectSlug: "claude-fable-5-thinking-high",
   },
   {
+    name: "Fable sticky → light 후속 switch",
+    input: {
+      task_description: "여기도 문구만 고쳐",
+      current_model: "Fable 5",
+    },
+    expectPrimary: "Composer 2.5",
+    expectStick: "switch",
+  },
+  {
+    name: "Fable sticky keep test — verbal false positive 없음",
+    input: {
+      task_description: "Fable sticky keep test",
+      current_model: "Fable 5",
+    },
+    expectPrimary: "Composer 2.5",
+    expectStick: "switch",
+  },
+  {
     name: "말 지정 코덱스로 UI override",
     input: {
       task_description: "대시보드 레이아웃 리팩터 코덱스로",
@@ -266,6 +284,50 @@ const cases: Case[] = [
 
 let failed = 0;
 let extraChecks = 0;
+
+/** Fable verbal one-shot → light follow-up (regression) */
+{
+  const fableTurn = recommendModel({
+    task_description: "UI 컴포넌트 리팩터 페이블로 해보자",
+    tags: ["ui"],
+  });
+  const lightFollow = recommendModel({
+    task_description: "로그인 문구 i18n 한 줄 수정",
+    current_model: "claude-fable-5-thinking-high",
+  });
+  const verbalNoFp = detectVerbalModelRequest("Fable sticky keep test");
+  const ok =
+    fableTurn.primary === "Fable 5" &&
+    fableTurn.verbal_override?.applied === true &&
+    fableTurn.verbal_override?.one_shot === true &&
+    lightFollow.primary === "Composer 2.5" &&
+    lightFollow.stick_action === "switch" &&
+    lightFollow.tier_switch === true &&
+    verbalNoFp == null;
+  console.log(
+    `[${ok ? "OK" : "FAIL"}] fable_one_shot→light switch=${lightFollow.stick_action} tier=${lightFollow.tier_switch}`,
+  );
+  extraChecks += 1;
+  if (!ok) failed += 1;
+}
+
+{
+  const r = recommendModel({
+    task_description: "문구만 수정",
+    current_model: "Fable 5",
+  });
+  const g = compactGateRecommend(r);
+  const gateOk =
+    r.stick_action === "switch" &&
+    g.primary_id === "composer-2.5-fast" &&
+    g.tier_switch === true &&
+    g.verbal_one_shot !== true;
+  console.log(
+    `[${gateOk ? "OK" : "FAIL"}] gate tier_switch primary=${g.primary_id}`,
+  );
+  extraChecks += 1;
+  if (!gateOk) failed += 1;
+}
 
 for (const c of cases) {
   const r = recommendModel(c.input);

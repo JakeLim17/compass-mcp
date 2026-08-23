@@ -133,8 +133,16 @@ function buildStartSessionPayload(input: {
   }
 
   if (!verbose) {
+    const gatePrimary =
+      typeof gate?.primary_id === "string" ? gate.primary_id : null;
     return {
-      adopted_model: stickyRes.sticky?.adopted_model ?? null,
+      /** 이번 턴 Task.model — gate.primary_id (switch 시에도 persisted sticky와 구분) */
+      adopted_model: gatePrimary ?? stickyRes.sticky?.adopted_model ?? null,
+      ...(stickyRes.sticky?.adopted_model &&
+      gate?.stick_action === "switch" &&
+      gatePrimary
+        ? { persisted_model: stickyRes.sticky.adopted_model }
+        : {}),
       alerts: usage.alerts.map((a) => a.code),
       ...(gate ?? {}),
       ...(input.alias_of ? { alias_of: input.alias_of } : {}),
@@ -314,17 +322,22 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "set_sticky",
-    "채택 모델 저장 (같은 작업이면 유지용).",
+    "채택 모델 저장. scope=verbal_one_shot 이면 말 지정 1회용(다음 light 턴 switch).",
     {
       adopted_model: z.string().describe("표시명 또는 Task slug"),
       host: hostSchema,
       context_hint: z.string().optional(),
+      scope: z
+        .enum(["task_stream", "verbal_one_shot"])
+        .optional()
+        .describe("verbal_one_shot = 페이블로 등 1회 지정, 영구 keep 금지"),
     },
-    async ({ adopted_model, host, context_hint }) => {
+    async ({ adopted_model, host, context_hint, scope }) => {
       const result = setSticky({
         adopted_model,
         host: host ? resolveHostId(host) : undefined,
         context_hint,
+        scope,
       });
       return jsonToolResult({
         ok: result.ok,

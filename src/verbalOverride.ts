@@ -27,53 +27,63 @@ type VerbalRule = {
   en?: RegExp;
 };
 
-const VERBAL_SUFFIX =
-  "(?:로|으로)?(?:\\s*(?:해보자|해줘|써|돌리|해|돌려|써봐|써줘|해봐|해\\s*줘|해\\s*봐|돌려\\s*줘|돌려\\s*봐|돌려봐|돌려줘|해보자|해줘|써|돌리|해))?";
+/** Optional trailing polite verb after (로|으로) — not bare model name in prose/slugs */
+const KO_TRAILING_VERB =
+  "(?:\\s*(?:해보자|해줘|써|돌리|해|돌려|써봐|써줘|해봐|해\\s*줘|해\\s*봐|돌려\\s*줘|돌려\\s*봐|돌려봐|돌려줘))?";
+
+/** Slug token — not a verbal directive when model name is part of an id */
+const HYPHEN_PREFIX = "(?<![-\\w])";
+
+/** Require (로|으로) or explicit 「써/돌려」 — avoids prose/slug false positive */
+const KO_MODEL_DIRECTIVE = (alias: string, latin = false) =>
+  new RegExp(
+    latin
+      ? `(?:${alias}(?:로|으로)${KO_TRAILING_VERB}|${HYPHEN_PREFIX}${alias}(?:로|으로)${KO_TRAILING_VERB}|(?:^|[\\s,.])${HYPHEN_PREFIX}${alias}\\s+(?:써|써줘|써봐|돌려|돌려줘|해\\s*줘|해봐))`
+      : `(?:${alias}(?:로|으로)${KO_TRAILING_VERB}|(?:^|[\\s,.])${alias}\\s+(?:써|써줘|써봐|돌려|돌려줘|해\\s*줘|해봐))`,
+    "i",
+  );
 
 const RULES: VerbalRule[] = [
   {
     model: "Fable 5",
     label: "Fable",
-    ko: new RegExp(`(?:페이블${VERBAL_SUFFIX}|fable${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:페이블|fable)", true),
     en: /\b(?:use|with)\s+fable\b/i,
   },
   {
     model: "GPT-5 Codex",
     label: "Codex",
-    ko: new RegExp(
-      `(?:코덱스${VERBAL_SUFFIX}|(?:terra|테라)${VERBAL_SUFFIX}|codex${VERBAL_SUFFIX})`,
-      "i",
-    ),
+    ko: KO_MODEL_DIRECTIVE("(?:코덱스|codex|terra|테라)", true),
     en: /\b(?:use|with)\s+(?:codex|terra)\b/i,
   },
   {
     model: "Composer 2.5",
     label: "Composer",
-    ko: new RegExp(`(?:컴포저${VERBAL_SUFFIX}|composer${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:컴포저|composer)", true),
     en: /\b(?:use|with)\s+composer\b/i,
   },
   {
     model: "Grok 5.x",
     label: "Grok",
-    ko: new RegExp(`(?:그록${VERBAL_SUFFIX}|grok${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:그록|grok)", true),
     en: /\b(?:use|with)\s+grok\b/i,
   },
   {
     model: "Claude Sonnet",
     label: "Sonnet",
-    ko: new RegExp(`(?:소넷${VERBAL_SUFFIX}|sonnet${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:소넷|sonnet)", true),
     en: /\b(?:use|with)\s+sonnet\b/i,
   },
   {
     model: "Claude Opus",
     label: "Opus",
-    ko: new RegExp(`(?:오퍼스${VERBAL_SUFFIX}|opus${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:오퍼스|opus)", true),
     en: /\b(?:use|with)\s+opus\b/i,
   },
   {
     model: "GPT-5 Sol",
     label: "Sol",
-    ko: new RegExp(`(?:\\b솔${VERBAL_SUFFIX}|\\bsol${VERBAL_SUFFIX})`, "i"),
+    ko: KO_MODEL_DIRECTIVE("(?:솔|sol)", true),
     en: /\b(?:use|with)\s+sol\b/i,
   },
 ];
@@ -92,4 +102,9 @@ export function detectVerbalModelRequest(text: string): VerbalOverrideResult | n
     }
   }
   return null;
+}
+
+/** True when 주인님이 이번 턴만 모델을 말로 지정 — persistent sticky에 넣지 않음 */
+export function isVerbalOneShotDirective(text: string): boolean {
+  return detectVerbalModelRequest(text) != null;
 }
