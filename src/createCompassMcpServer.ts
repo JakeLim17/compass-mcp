@@ -210,7 +210,7 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "start_session",
-    "작업 게이트(compact): adopted_model + alerts + primary_id + must_do.task_model + stick + cost_advice + run_hint. task_description 필수(추천). verbose=전체.",
+    "작업 게이트(compact): copy_task_model + must_do.task_model 을 Task.model=에 필수 복사. 말만 switch=위반. verbose=전체.",
     startSessionArgs,
     async (args) =>
       jsonToolResult(
@@ -239,7 +239,7 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "recommend_model",
-    "명령 문장 정독 → 작업에 맞는 모델. compact JSON + run_hint(다음 Task model=primary_id). 에이전트: recommend 후 Task/subagent model=primary_id, log_model_usage, set_sticky. verbose=true면 scores.",
+    "명령 문장 정독 → 작업에 맞는 모델. copy_task_model을 Task.model=에 필수 복사(말만 switch=위반). 이후 log_model_usage → set_sticky. verbose=true면 scores.",
     {
       task_description: z
         .string()
@@ -342,7 +342,7 @@ export function createCompassMcpServer(): McpServer {
 
   server.tool(
     "verify_run_compliance",
-    "에이전트 준수 검증: compact recommend에 must_do·run_hint·mcp_version·candidates≥2 필수. 내장 시나리오 3건 + optional task_description.",
+    "준수 검증: must_do.task_model_required·copy_task_model·Task.model= 문구. 내장 4건+gate. 부모=Composer+Task도 Composer는 런타임 검증 불가(룰 강제).",
     {
       task_description: z
         .string()
@@ -374,17 +374,23 @@ export function createCompassMcpServer(): McpServer {
         mcp_version: serverVersion,
         must_do_template: {
           ko: [
-            "Task/subagent model=<primary_id>",
+            "Task.model=<copy_task_model> 필수",
+            "model 생략·말만 「추천으로 다시」=위반",
+            "Multitask 부모도 model=must_do.task_model",
             "unavailable → candidates[1].id",
             "log_model_usage → set_sticky",
             "주인님껀 model_persistence만",
           ],
         },
+        runtime_limit: {
+          ko: "부모 채팅이 Composer인데 Task도 Composer인지는 코드로 검증 불가 — 룰+must_do.task_model_required로 강제.",
+          en: "Cannot code-verify parent=Composer and Task also Composer — enforce via rules + must_do.task_model_required.",
+        },
         reports,
         agent_compliance: ok
           ? loc === "ko"
-            ? "준수 필드 OK — Task model=must_do.task_model 실행"
-            : "Compliance fields OK — run Task with must_do.task_model"
+            ? "준수 필드 OK — Task.model=must_do.task_model 실행(말만 switch=위반)"
+            : "Compliance fields OK — run Task.model=must_do.task_model (talk-only switch=violation)"
           : loc === "ko"
             ? "누락 필드 있음 — npm run sync 후 how_to_refresh_mcp"
             : "Missing fields — npm run sync then how_to_refresh_mcp",

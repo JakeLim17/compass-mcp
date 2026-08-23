@@ -4,7 +4,7 @@ Local MCP that reads what you're doing and suggests which model fits — copy tw
 
 ## How it runs
 
-Each real task should pass through **`start_session`** (compact) once: cheap model by default, heavier only when the task needs it. Agents follow workspace rules to call it at work start (including Multitask / subagents — do not skip). **Cursor does not auto-switch the chat dropdown** or intercept every message. Same task + `stick_action=keep` → no repeat recommend. If the user says a prompt-only test phrase, still call `start_session` or `recommend_model`; do not implement.
+Each real task should pass through **`start_session`** (compact) once: cheap model by default, heavier only when the task needs it. Agents follow workspace rules to call it at work start (including Multitask / subagents — do not skip). **Cursor does not auto-switch the chat dropdown** or intercept every message — copy `copy_task_model` onto Task `model=`. Same task + `stick_action=keep` → no repeat recommend (except when work type switches to planning/architecture). If the user says a prompt-only test phrase, still call `start_session` or `recommend_model`; do not implement.
 
 ## Install
 
@@ -52,6 +52,7 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 ## Limits
 
 - Does not change the chat dropdown for you — you or the agent still pick the model.
+- **Failure mode:** saying “추천 모델로 다시” without putting `must_do.task_model` (`copy_task_model`) on Task `model=` leaves Composer. Cursor MCP cannot auto-bind Task. `task_model_required` + rules enforce the copy; `verify_run_compliance` cannot see the parent chat runtime.
 - Cursor is the main target; Claude Code and Codex CLI work too.
 - Remote web connectors are optional (see below).
 
@@ -73,4 +74,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.3+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.4+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).

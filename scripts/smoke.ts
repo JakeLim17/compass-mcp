@@ -29,7 +29,11 @@ import {
   mcpRefreshSessionHint,
 } from "../src/refreshHelp.ts";
 import { detectVerbalModelRequest } from "../src/verbalOverride.ts";
-import { verifyBuiltInScenarios, verifyRecommendPayload } from "../src/compliance.ts";
+import {
+  verifyBuiltInScenarios,
+  verifyGatePayload,
+  verifyRecommendPayload,
+} from "../src/compliance.ts";
 import { getUsageSummary, logModelUsage } from "../src/usage.ts";
 import { getVersionInfo, buildUpdateHint } from "../src/version.ts";
 
@@ -425,10 +429,13 @@ for (const ex of EXAMPLE_PROMPTS) {
     !!(c.run_hint as { ko?: string; task_model?: string })?.ko?.includes(
       r.primary_id,
     ) &&
-    !!(c.agent_note as { ko?: string })?.ko?.includes("primary_id") &&
+    !!(c.agent_note as { ko?: string })?.ko?.includes("Task.model=") &&
     c.mcp_version === PKG_VERSION &&
+    c.copy_task_model === r.primary_id &&
     !!(c.must_do as { ko?: string[]; task_model?: string })?.ko?.length &&
     (c.must_do as { task_model?: string }).task_model === r.primary_id &&
+    (c.must_do as { task_model_required?: boolean }).task_model_required ===
+      true &&
     !("scores" in c) &&
     !("usage_estimate" in c);
   console.log(`[${ok ? "OK" : "FAIL"}] compactRecommendResult clarity + cost_preview`);
@@ -445,18 +452,49 @@ for (const ex of EXAMPLE_PROMPTS) {
   const g = compactGateRecommend(r);
   const ok =
     g.primary_id === r.primary_id &&
+    g.copy_task_model === r.primary_id &&
     (g.must_do as { task_model?: string })?.task_model === r.primary_id &&
+    (g.must_do as { task_model_required?: boolean })?.task_model_required ===
+      true &&
+    typeof (g.must_do as { fallback_model?: string })?.fallback_model ===
+      "string" &&
     g.stick_action === "keep" &&
     typeof g.cost_advice === "string" &&
     (g.cost_advice as string).length > 0 &&
     typeof g.run_hint === "string" &&
-    (g.run_hint as string).includes(r.primary_id) &&
+    (g.run_hint as string).includes(`Task.model=${r.primary_id}`) &&
+    (g.run_hint as string).includes("말만 switch") &&
+    verifyGatePayload(g).ok &&
     !("candidates" in g) &&
     !("clarity" in g) &&
     !("reason" in g);
   console.log(`[${ok ? "OK" : "FAIL"}] compactGateRecommend gate fields`);
   extraChecks += 1;
   if (!ok) failed += 1;
+}
+
+{
+  const r = recommendModel({
+    task_description: "결제 모듈 구조 설계와 기술 선택",
+    tags: ["architecture"],
+  });
+  const g = compactGateRecommend(r);
+  const compact = compactRecommendResult(r, { mcp_version: PKG_VERSION });
+  const bindOk =
+    verifyGatePayload(g).ok &&
+    verifyRecommendPayload(compact).ok &&
+    g.copy_task_model === r.primary_id &&
+    (g.must_do as { task_model_required?: boolean }).task_model_required ===
+      true &&
+    typeof g.run_hint === "string" &&
+    (g.run_hint as string).includes("말만 switch") &&
+    (compact.must_do as { task_model_required?: boolean })
+      .task_model_required === true;
+  console.log(
+    `[${bindOk ? "OK" : "FAIL"}] task_model_bind architecture copy=${g.copy_task_model}`,
+  );
+  extraChecks += 1;
+  if (!bindOk) failed += 1;
 }
 
 // cost_preview weight mapping + Codex heavy advice

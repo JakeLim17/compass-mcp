@@ -6,6 +6,7 @@ import type { MustDoChecklist } from "./mustDo.js";
 import {
   recommendModel,
   compactRecommendResult,
+  compactGateRecommend,
   type Tag,
 } from "./recommend.js";
 
@@ -52,21 +53,36 @@ export function verifyRecommendPayload(
 
   const primaryId = payload.primary_id;
   const runHint = payload.run_hint as
-    | { ko?: string; task_model?: string }
+    | { ko?: string; task_model?: string; task_model_required?: boolean }
     | undefined;
   const mustDo = payload.must_do as MustDoChecklist | undefined;
   const candidates = payload.candidates as unknown[] | undefined;
+  const copyTaskModel = payload.copy_task_model;
 
   checks.push({
     id: "run_hint_has_primary",
     ok:
       typeof primaryId === "string" &&
       !!runHint?.ko?.includes(primaryId) &&
+      !!runHint?.ko?.includes("Task.model=") &&
       runHint?.task_model === primaryId,
   });
   checks.push({
     id: "must_do_task_model",
-    ok: mustDo?.task_model === primaryId && (mustDo?.ko?.length ?? 0) >= 4,
+    ok: mustDo?.task_model === primaryId && (mustDo?.ko?.length ?? 0) >= 5,
+  });
+  checks.push({
+    id: "must_do_task_model_required",
+    ok:
+      mustDo?.task_model_required === true &&
+      runHint?.task_model_required === true &&
+      copyTaskModel === primaryId,
+  });
+  checks.push({
+    id: "must_do_talk_only_violation",
+    ok:
+      !!mustDo?.ko?.some((l) => l.includes("말만")) &&
+      !!runHint?.ko?.includes("말만 switch"),
   });
   checks.push({
     id: "must_do_no_sticky_word_to_user",
@@ -99,6 +115,61 @@ export function verifyRecommendPayload(
   };
 }
 
+/** start_session compact gate — machine-copy slug must be present */
+export function verifyGatePayload(
+  payload: Record<string, unknown>,
+): ComplianceReport {
+  const checks: ComplianceCheck[] = [];
+  const missing: string[] = [];
+  const primaryId = payload.primary_id;
+  const mustDo = payload.must_do as
+    | {
+        task_model?: string;
+        fallback_model?: string;
+        task_model_required?: boolean;
+      }
+    | undefined;
+  const runHint = payload.run_hint;
+  const copyTaskModel = payload.copy_task_model;
+
+  for (const key of [
+    "primary_id",
+    "copy_task_model",
+    "must_do",
+    "run_hint",
+  ] as const) {
+    const present = key in payload && payload[key] != null;
+    checks.push({ id: `gate_has_${key}`, ok: present });
+    if (!present) missing.push(key);
+  }
+
+  checks.push({
+    id: "gate_copy_task_model",
+    ok:
+      typeof primaryId === "string" &&
+      copyTaskModel === primaryId &&
+      mustDo?.task_model === primaryId &&
+      mustDo?.task_model_required === true &&
+      typeof mustDo?.fallback_model === "string" &&
+      mustDo.fallback_model.length > 0,
+  });
+  checks.push({
+    id: "gate_run_hint_bind",
+    ok:
+      typeof runHint === "string" &&
+      typeof primaryId === "string" &&
+      runHint.includes(`Task.model=${primaryId}`) &&
+      runHint.includes("말만 switch"),
+  });
+
+  const ok = checks.every((c) => c.ok);
+  return {
+    ok,
+    checks,
+    missing,
+  };
+}
+
 /** Built-in scenario validation — smoke + verify_run_compliance share this */
 export function verifyBuiltInScenarios(mcpVersion: string): ComplianceReport {
   const scenarios: Array<{ task_description: string; tags?: Tag[] }> = [
@@ -108,6 +179,10 @@ export function verifyBuiltInScenarios(mcpVersion: string): ComplianceReport {
       tags: ["bug"],
     },
     { task_description: "대시보드 레이아웃 리팩터", tags: ["ui"] },
+    {
+      task_description: "결제 모듈 구조 설계와 기술 선택",
+      tags: ["architecture"],
+    },
   ];
 
   const allChecks: ComplianceCheck[] = [];
@@ -125,6 +200,17 @@ export function verifyBuiltInScenarios(mcpVersion: string): ComplianceReport {
       });
     }
     for (const m of report.missing) missing.add(m);
+
+    const gate = compactGateRecommend(result);
+    const gateReport = verifyGatePayload(gate);
+    for (const c of gateReport.checks) {
+      allChecks.push({
+        id: `scenario_${i}_${c.id}`,
+        ok: c.ok,
+        detail: c.detail,
+      });
+    }
+    for (const m of gateReport.missing) missing.add(m);
   }
 
   return {

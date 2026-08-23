@@ -1593,12 +1593,13 @@ export function buildRecommendClarity(result: RecommendResult): {
   };
 }
 
-/** Task worker hint — always use primary_id unless host says unavailable */
+/** Task worker hint — copy this slug onto Task.model (MCP cannot auto-bind). */
 export function buildRunHint(result: RecommendResult): {
   ko: string;
   en: string;
   task_model: string;
   fallback_model: string;
+  task_model_required: true;
   ui_model?: string;
 } {
   const fb =
@@ -1619,15 +1620,16 @@ export function buildRunHint(result: RecommendResult): {
   return {
     task_model: result.primary_id,
     fallback_model: fb,
+    task_model_required: true,
     ...(ui ? { ui_model: ui } : {}),
-    ko: `${uiKo}Task model=${result.primary_id} (불가 시 ${fb}) → log_model_usage → set_sticky`,
-    en: `${uiEn}Task model=${result.primary_id} (if unavailable ${fb}) → log_model_usage → set_sticky`,
+    ko: `${uiKo}Task.model=${result.primary_id} 필수(말만 switch=위반; 불가 시 ${fb}) → log_model_usage → set_sticky`,
+    en: `${uiEn}Task.model=${result.primary_id} required (talk-only switch=violation; if unavailable ${fb}) → log_model_usage → set_sticky`,
   };
 }
 
 const AGENT_NOTE = {
-  ko: "실제 작업(Task/subagent)은 primary_id로 실행. MCP 호출 모델(예: Composer)과 다를 수 있음. unavailable → candidates[1].id. 주인님껀 sticky 단어 금지 — model_persistence 사용.",
-  en: "Run real work (Task/subagent) with primary_id — may differ from MCP caller. If unavailable → candidates[1].id. Never say sticky to user — use model_persistence.",
+  ko: "Task.model=must_do.task_model(copy_task_model) 필수. model 생략=Composer 잔류=위반. 「추천으로 다시」도 그 slug로 재실행. Multitask 부모도 동일. unavailable → candidates[1].id. 주인님껀 sticky 단어 금지 — model_persistence.",
+  en: "Task.model=must_do.task_model (copy_task_model) required. Omitting model leaves Composer = violation. Talk-only switch also requires that slug. Multitask parent must pass it too. If unavailable → candidates[1].id. Never say sticky to user — use model_persistence.",
 } as const;
 
 /** Token-minimal gate payload for start_session (not recommend_model). */
@@ -1639,7 +1641,12 @@ export function compactGateRecommend(
   const run_hint = buildRunHint(result);
   return {
     primary_id: result.primary_id,
-    must_do: { task_model: must_do.task_model },
+    copy_task_model: result.primary_id,
+    must_do: {
+      task_model: must_do.task_model,
+      fallback_model: must_do.fallback_model,
+      task_model_required: true,
+    },
     stick_action: result.stick_action ?? null,
     model_persistence: result.model_persistence?.ko ?? null,
     cost_advice: cost_preview.advice.ko,
@@ -1677,6 +1684,7 @@ export function compactRecommendResult(
     host: result.host,
     recommendation_id: result.recommendation_id,
     mcp_version: opts?.mcp_version ?? null,
+    copy_task_model: result.primary_id,
     run_hint,
     must_do,
     agent_note: AGENT_NOTE,
