@@ -6,6 +6,7 @@
  *
  * Cursor catalog SSOT: recommend.CURSOR_AGENT_CATALOG / CURSOR_TASK_SLUG
  * (UI chat dropdown still does not auto-switch).
+ * Recheck slugs vs Cursor Models UI + docs/models-and-pricing (~monthly or on changelog).
  *
  * Lightest tier is **per host**, not a single Haiku slug:
  * - cursor → Composer (composer-2.5-fast)
@@ -56,7 +57,7 @@ const CURSOR_IDS: Record<ModelId, string> = {
   "Claude Sonnet": "claude-sonnet-5-thinking-high",
   "Claude Opus": "claude-opus-4-8-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
-  "Grok 5.x": "cursor-grok-4.5-high-fast",
+  "Grok 5.x": "cursor-grok-4.6-high-fast",
   "GPT-5 Sol": "gpt-5.6-sol-medium",
   "GPT-5 Codex": "gpt-5.6-terra-medium",
 };
@@ -67,7 +68,7 @@ export const CURSOR_TASK_ENABLED_SLUGS = [
   "claude-sonnet-5-thinking-high",
   "claude-opus-4-8-thinking-high",
   "claude-fable-5-thinking-high",
-  "cursor-grok-4.5-high-fast",
+  "cursor-grok-4.6-high-fast",
   "gpt-5.6-sol-medium",
   "gpt-5.6-terra-medium",
   "kimi-k2.7-code",

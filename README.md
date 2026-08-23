@@ -4,7 +4,7 @@ Local MCP that reads what you're doing and suggests which model fits — copy tw
 
 ## How it runs
 
-Each real task should pass through **`start_session`** (compact) once: cheap model by default, heavier only when the task needs it. Agents follow workspace rules to call it at work start; **Cursor does not auto-switch the chat dropdown** or intercept every message. Same task + `stick_action=keep` → no repeat recommend. Skip the gate for one-liners, greetings, or prompt-only tests.
+Each real task should pass through **`start_session`** (compact) once: cheap model by default, heavier only when the task needs it. Agents follow workspace rules to call it at work start (including Multitask / subagents — do not skip). **Cursor does not auto-switch the chat dropdown** or intercept every message. Same task + `stick_action=keep` → no repeat recommend. If the user says a prompt-only test phrase, still call `start_session` or `recommend_model`; do not implement.
 
 ## Install
 
@@ -18,9 +18,11 @@ npm run connect -- codex
 
 Pick one host line. It installs, builds, and writes your MCP config (existing config gets backed up first).
 
-Then restart the app. On Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle off and on.
+Then restart the app. On Cursor: sidebar **Customize → MCPs** → toggle off and on.
 
 Not on npm — clone from GitHub. Updates: `npm run sync`.
+
+**Catalog maintenance:** Cursor adds models often. Recheck Task slugs in `src/recommend.ts` / `src/hosts.ts` against [Models & Pricing](https://cursor.com/docs/models-and-pricing) about monthly (or when the Cursor Models picker changes). Then `npm run sync` and toggle MCP in Customize → MCPs.
 
 ## Use it
 
@@ -71,4 +73,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.1+). `npm run connect -- cursor|claude|codex` 한 줄 설치. 채팅에 그냥 "이 작업 모델 뭐 쓸까", "페이블로 문구 수정", "타입 에러 회귀 디버그"처럼 말하면 됨. 말로 모델 지정(`페이블로`, `코덱스로`)하면 점수보다 우선. **설계(Fable/Grok/Opus) 끝나고 「구현 들어가」면 Sonnet으로 내려감** — 전면 리디자인·「페이블로」는 Fable 유지. 채팅 드롭다운은 자동 안 바뀜 — Cursor가 메인, 웹 HTTP는 필요할 때만.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.1+). `npm run connect -- cursor|claude|codex` 한 줄 설치. 채팅에 그냥 "이 작업 모델 뭐 쓸까", "페이블로 문구 수정", "타입 에러 회귀 디버그"처럼 말하면 됨. 말로 모델 지정(`페이블로`, `코덱스로`)하면 점수보다 우선. **실작업·Multitask·서브에이전트는 `start_session`(compact) 항상** — 「부모 완료」「테스트 창」 핑계로 생략 금지. 「테스트야」는 MCP 호출·코드 수정만 금지. **설계(Fable/Grok/Opus) 끝나고 「구현 들어가」면 Sonnet으로 내려감** — 전면 리디자인·「페이블로」는 Fable 유지. 채팅 드롭다운은 자동 안 바뀜 — Cursor가 메인, 웹 HTTP는 필요할 때만.

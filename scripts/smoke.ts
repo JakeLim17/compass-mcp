@@ -10,6 +10,7 @@ import { loadProjectConfig } from "../src/projectConfig.ts";
 import {
   COST_TIER,
   CURSOR_AGENT_CATALOG,
+  CURSOR_TASK_SLUG,
   MODEL_TIER,
   analyzeCommand,
   buildCostPreview,
@@ -17,6 +18,7 @@ import {
   compactRecommendResult,
   costTierToWeight,
   recommendModel,
+  resolveModelId,
   type CostTier,
   type TokenRisk,
 } from "../src/recommend.ts";
@@ -662,7 +664,7 @@ try {
   const cursorKo = buildHowToRefreshMcp({ host: "cursor", locale: "ko" });
   const hint = mcpRefreshSessionHint();
   const refreshOk =
-    cursorKo.steps_ko.some((s) => s.includes("Tools & MCP")) &&
+    cursorKo.steps_ko.some((s) => s.includes("Customize") && s.includes("MCPs")) &&
     EXPECTED_TOOL_NAMES.includes("recommend_model") &&
     hint.tool === "how_to_refresh_mcp";
   console.log(`[${refreshOk ? "OK" : "FAIL"}] how_to_refresh_mcp`);
@@ -692,6 +694,25 @@ try {
   );
   extraChecks += 1;
   if (!ok) failed += 1;
+}
+
+{
+  const grokSlug = CURSOR_TASK_SLUG["Grok 5.x"];
+  const legacyOk =
+    grokSlug === "cursor-grok-4.6-high-fast" &&
+    resolveModelId("cursor-grok-4.6-high-fast") === "Grok 5.x" &&
+    resolveModelId("cursor-grok-4.5-high-fast") === "Grok 5.x";
+  const grokVerbal = recommendModel({
+    task_description: "결제 모듈 구조 설계 그록으로",
+    tags: ["architecture"],
+  });
+  const grokSlugOk =
+    legacyOk &&
+    grokVerbal.primary === "Grok 5.x" &&
+    grokVerbal.primary_slug === "cursor-grok-4.6-high-fast";
+  console.log(`[${grokSlugOk ? "OK" : "FAIL"}] grok_4.6_slug=${grokSlug}`);
+  extraChecks += 1;
+  if (!grokSlugOk) failed += 1;
 }
 
 {

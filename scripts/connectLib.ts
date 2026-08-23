@@ -154,7 +154,7 @@ export function restartHint(target: ConnectTarget, locale: "ko" | "en" = "ko"): 
     switch (target) {
       case "cursor":
         return [
-          "Restart or refresh MCP in Cursor: Cmd/Ctrl+Shift+J → Tools & MCP → toggle compass-mcp OFF/ON.",
+          "Restart or refresh MCP in Cursor: Customize → MCPs → toggle compass-mcp OFF/ON.",
         ];
       case "claude":
         return [
@@ -167,7 +167,7 @@ export function restartHint(target: ConnectTarget, locale: "ko" | "en" = "ko"): 
   switch (target) {
     case "cursor":
       return [
-        "Cursor에서 MCP 새로고침: Cmd/Ctrl+Shift+J → Tools & MCP → compass-mcp 토글 OFF/ON.",
+        "Cursor에서 MCP 새로고침: Customize → MCPs → compass-mcp 토글 OFF/ON.",
       ];
     case "claude":
       return [

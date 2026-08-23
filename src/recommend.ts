@@ -62,16 +62,22 @@ export interface CostPreview {
  * Never recommend a slug outside this list for host=cursor.
  * kimi is optional (resolve/sticky OK; not default-scored).
  */
+/** Cursor docs: https://cursor.com/docs/models-and-pricing — recheck when new models ship */
 export const CURSOR_AGENT_CATALOG = [
   "composer-2.5-fast",
   "claude-sonnet-5-thinking-high",
   "claude-opus-4-8-thinking-high",
   "claude-fable-5-thinking-high",
-  "cursor-grok-4.5-high-fast",
+  "cursor-grok-4.6-high-fast",
   "gpt-5.6-sol-medium",
   "gpt-5.6-terra-medium",
   "kimi-k2.7-code",
 ] as const;
+
+/** Resolve/sticky only — not default-scored or recommended */
+export const CURSOR_LEGACY_SLUGS: Record<string, ModelId> = {
+  "cursor-grok-4.5-high-fast": "Grok 5.x",
+};
 
 export type CursorCatalogSlug = (typeof CURSOR_AGENT_CATALOG)[number];
 
@@ -127,7 +133,10 @@ const RELATIVE_COST: Record<ModelId, UsageEstimate> = {
   "Claude Sonnet": { ko: "Sonnet ≈2×", en: "Sonnet ≈2×" },
   "Claude Opus": { ko: "Opus ≈2–3×", en: "Opus ≈2–3×" },
   "Fable 5": { ko: "Fable ≈2–3×", en: "Fable ≈2–3×" },
-  "Grok 5.x": { ko: "Grok ≈2–3× (설계)", en: "Grok ≈2–3× (design)" },
+  "Grok 5.x": {
+    ko: "Grok 4.6 Fast ≈4–6× (Composer Fast 대비) — 설계·장기 에이전트",
+    en: "Grok 4.6 Fast ≈4–6× vs Composer Fast — design / long agents",
+  },
   "GPT-5 Sol": { ko: "Sol ≈2–3×", en: "Sol ≈2–3×" },
   "GPT-5 Codex": { ko: "Codex/Terra ≈4–5× (고비용)", en: "Codex/Terra ≈4–5× (high)" },
 };
@@ -156,8 +165,8 @@ const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
     ko: "중간 무게 멀티파일·UI 작업 (Cursor 고가 Claude)",
   },
   "Grok 5.x": {
-    en: "design/plan contender — broad tradeoffs & creative planning",
-    ko: "설계·기획 경쟁 후보 — 넓은 트레이드오프·창의 기획",
+    en: "Grok 4.6 — long-horizon design/planning & agentic tradeoffs (not light patch)",
+    ko: "Grok 4.6 — 장기 설계·기획·에이전트 트레이드오프 (가벼운 패치용 아님)",
   },
   "GPT-5 Sol": {
     en: "cheaper GPT tier — mid reasoning without Terra burn",
@@ -193,17 +202,20 @@ export const CURSOR_TASK_SLUG: Record<ModelId, string> = {
   "Claude Sonnet": "claude-sonnet-5-thinking-high",
   "Claude Opus": "claude-opus-4-8-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
-  "Grok 5.x": "cursor-grok-4.5-high-fast",
+  "Grok 5.x": "cursor-grok-4.6-high-fast",
   "GPT-5 Sol": "gpt-5.6-sol-medium",
   "GPT-5 Codex": "gpt-5.6-terra-medium",
 };
 
-const SLUG_TO_MODEL: Record<string, ModelId> = Object.fromEntries(
-  (Object.entries(CURSOR_TASK_SLUG) as [ModelId, string][]).map(([id, slug]) => [
-    slug,
-    id,
-  ]),
-) as Record<string, ModelId>;
+const SLUG_TO_MODEL: Record<string, ModelId> = {
+  ...Object.fromEntries(
+    (Object.entries(CURSOR_TASK_SLUG) as [ModelId, string][]).map(([id, slug]) => [
+      slug,
+      id,
+    ]),
+  ),
+  ...CURSOR_LEGACY_SLUGS,
+} as Record<string, ModelId>;
 
 export function isCursorCatalogSlug(slug: string): boolean {
   return CURSOR_CATALOG_SET.has(slug);
@@ -352,7 +364,7 @@ const BASE: Record<ModelId, number> = {
   "Claude Sonnet": 12,
   "Claude Opus": 6,
   "Fable 5": 15,
-  "Grok 5.x": 8,
+  "Grok 5.x": 10,
   "GPT-5 Sol": 4,
   "GPT-5 Codex": 5,
 };
@@ -910,8 +922,8 @@ function buildCostAdvice(
   }
   if (primary === "Grok 5.x") {
     return {
-      ko: "Grok 적합 — 넓은 설계·기획; UI 설계면 Fable/Sonnet도 후보",
-      en: "Grok fits broad design/planning — Fable/Sonnet for UI design",
+      ko: "Grok 4.6 적합 — 넓은 설계·장기 에이전트; 일상 패치·UI는 Composer/Sonnet",
+      en: "Grok 4.6 fits broad design / long agents; daily patches & UI → Composer/Sonnet",
     };
   }
   if (primary === "GPT-5 Codex") {
@@ -1187,13 +1199,13 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   // 설계·기획: Fable/Grok/Opus/Sonnet 경쟁 (Fable 단독 고정 없음)
   if (signals.architecture && !uiTask && !signals.implementation) {
     if (signals.budget === "premium") {
-      scores["Grok 5.x"] += 12;
+      scores["Grok 5.x"] += 14;
       scores["Fable 5"] += 10;
       scores["Claude Opus"] += 8;
     }
     if (prefer_cheaper && signals.budget !== "premium") {
       scores["Claude Sonnet"] += 8;
-      scores["Grok 5.x"] += 4;
+      scores["Grok 5.x"] += 2;
     }
   }
 

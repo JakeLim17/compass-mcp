@@ -1,6 +1,6 @@
 {
   "name": "compass-mcp",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "license": "MIT",
   "description": "Compass MCP — task-fit model routing with fallback chain (design competes, not Claude-only)",

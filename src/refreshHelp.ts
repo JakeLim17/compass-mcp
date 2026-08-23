@@ -1,8 +1,8 @@
 /**
  * Host-specific “how to refresh MCP” after install/update.
- * Cursor steps follow official docs (Tools & MCP toggle; no dedicated Refresh command).
+ * Cursor steps follow official docs (Customize → MCPs toggle; no dedicated Refresh command).
  * @see https://cursor.com/docs/mcp.md
- * @see https://cursor.com/help/customization/mcp.md
+ * @see https://cursor.com/docs/customize-cursor.md
  */
 
 export type RefreshHost =
@@ -43,7 +43,7 @@ export const EXPECTED_TOOL_NAMES = [
 
 const DOCS = {
   cursor_mcp: "https://cursor.com/docs/mcp.md",
-  cursor_help: "https://cursor.com/help/customization/mcp.md",
+  cursor_help: "https://cursor.com/docs/customize-cursor.md",
 } as const;
 
 type HostGuide = {
@@ -60,15 +60,15 @@ const GUIDES: Record<RefreshHost, HostGuide> = {
     host: "cursor",
     display_name: "Cursor",
     steps_en: [
-      "Open Settings: Mac Cmd+Shift+J (Windows/Linux Ctrl+Shift+J) → Tools & MCP.",
+      "Open Customize in the sidebar → MCPs (or Cmd/Ctrl+Shift+J then Customize → MCPs).",
       "Find compass-mcp / user-compass-mcp → toggle OFF then ON (or click ↻ refresh if shown).",
-      "Optional: Cmd+Shift+P → search “MCP” / “Tools & MCP” (docs have no dedicated “MCP: Refresh” command).",
+      "Optional: Cmd+Shift+P → search “MCP” / “Customize” (docs have no dedicated “MCP: Refresh” command).",
       "Still stale: quit Cursor fully and reopen. If needed, remove the server then re-add. Check MCP Logs via Cmd+Shift+U.",
     ],
     steps_ko: [
-      "설정 열기: Mac Cmd+Shift+J (Windows/Linux Ctrl+Shift+J) → Tools & MCP.",
+      "사이드바 Customize → MCPs (또는 Cmd/Ctrl+Shift+J 후 Customize → MCPs).",
       "compass-mcp / user-compass-mcp 찾기 → 토글 OFF 후 ON (↻ 새로고침이 보이면 사용).",
-      "선택: Cmd+Shift+P → “MCP” / “Tools & MCP” 검색 (문서에 전용 “MCP: Refresh” 명령은 없음).",
+      "선택: Cmd+Shift+P → “MCP” / “Customize” 검색 (문서에 전용 “MCP: Refresh” 명령은 없음).",
       "그래도 안 되면: Cursor 완전 종료 후 재실행. 필요 시 서버 제거 후 재추가. MCP 로그는 Cmd+Shift+U.",
     ],
     notes_en: [
@@ -198,9 +198,9 @@ export function buildHowToRefreshMcp(input?: {
     docs: host === "cursor" ? DOCS : undefined,
     expected_tools: [...EXPECTED_TOOL_NAMES],
     tip_en:
-      "After install/update, if tools look stale (e.g. start_session missing), follow these steps then ask the agent to call how_to_refresh_mcp again if needed.",
+      "After install/update, if tools look stale (e.g. start_session missing), follow these steps then ask the agent to call how_to_refresh_mcp again if needed. Also recheck Cursor model slugs in hosts.ts / recommend.ts when Cursor ships new models (~monthly: cursor.com/docs/models-and-pricing).",
     tip_ko:
-      "설치/업데이트 후 도구가 안 보이면(예: start_session 없음) 위 절차 후, 필요하면 에이전트에게 how_to_refresh_mcp 를 다시 호출하게 하세요.",
+      "설치/업데이트 후 도구가 안 보이면(예: start_session 없음) 위 절차 후, 필요하면 에이전트에게 how_to_refresh_mcp 를 다시 호출하게 하세요. Cursor에 새 모델이 나오면 hosts.ts·recommend.ts 카탈로그도 주기 점검(월 1회 권장: cursor.com/docs/models-and-pricing).",
   };
 }
 
