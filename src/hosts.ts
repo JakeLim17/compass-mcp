@@ -14,7 +14,7 @@
  * - openai → Mini/Nano (gpt-4.1-mini)
  * Logical role for lightest scoring: ModelId "Composer 2.5".
  */
-import type { ModelId } from "./recommend.js";
+import type { ModelId, CostTier } from "./recommend.js";
 
 export type HostId = "cursor" | "claude" | "openai" | "generic";
 
@@ -56,19 +56,100 @@ const CURSOR_IDS: Record<ModelId, string> = {
   "Composer 2.5": "composer-2.5-fast",
   "Claude Sonnet": "claude-sonnet-5-thinking-high",
   "Claude Opus": "claude-opus-4-8-thinking-high",
+  "Opus 5": "claude-opus-5-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
   "Grok 5.x": "cursor-grok-4.6-high-fast",
   "GPT-5 Sol": "gpt-5.6-sol-medium",
   "GPT-5 Codex": "gpt-5.6-terra-medium",
+  "Kimi K2.7": "kimi-k2.7-code",
 };
 
-/** Enabled in Cursor Task/agent UI (screenshot green) — SSOT for recommend on host=cursor */
+/** Full Cursor representative catalog — Task slugs + UI Standard (docs / list_hosts) */
+export const CURSOR_MODEL_CATALOG: Array<{
+  logical: ModelId;
+  task_slug: string;
+  ui_slug?: string;
+  cost_tier: CostTier;
+  role_ko: string;
+  legacy?: boolean;
+}> = [
+  {
+    logical: "Composer 2.5",
+    task_slug: "composer-2.5-fast",
+    ui_slug: "composer-2.5",
+    cost_tier: "low",
+    role_ko: "가벼운 패치·i18n·일상 루프 (UI=Standard, Task=fast fallback)",
+  },
+  {
+    logical: "Claude Sonnet",
+    task_slug: "claude-sonnet-5-thinking-high",
+    cost_tier: "medium",
+    role_ko: "일반 UI·품질 유지 mid",
+  },
+  {
+    logical: "Claude Opus",
+    task_slug: "claude-opus-4-8-thinking-high",
+    cost_tier: "medium-high",
+    role_ko: "Opus 4.8 — Sonnet 위 Claude (레거시)",
+    legacy: true,
+  },
+  {
+    logical: "Opus 5",
+    task_slug: "claude-opus-5-thinking-high",
+    cost_tier: "medium-high",
+    role_ko: "초대형·최고 난이도 (드물게)",
+  },
+  {
+    logical: "Fable 5",
+    task_slug: "claude-fable-5-thinking-high",
+    cost_tier: "medium-high",
+    role_ko: "멀티파일 UI·레이아웃 리팩터",
+  },
+  {
+    logical: "Grok 5.x",
+    task_slug: "cursor-grok-4.6-high-fast",
+    cost_tier: "medium-high",
+    role_ko: "설계·기획·장기 에이전트 (Grok 4.6)",
+  },
+  {
+    logical: "Grok 5.x",
+    task_slug: "cursor-grok-4.5-high-fast",
+    cost_tier: "medium-high",
+    role_ko: "Grok 4.5 legacy — resolve/sticky only",
+    legacy: true,
+  },
+  {
+    logical: "GPT-5 Sol",
+    task_slug: "gpt-5.6-sol-medium",
+    cost_tier: "medium-high",
+    role_ko: "Codex보다 가벼운 버그·CI 탐색",
+  },
+  {
+    logical: "GPT-5 Codex",
+    task_slug: "gpt-5.6-terra-medium",
+    cost_tier: "high",
+    role_ko: "난해 버그·CI·Terra/Codex",
+  },
+  {
+    logical: "Kimi K2.7",
+    task_slug: "kimi-k2.7-code",
+    cost_tier: "medium",
+    role_ko: "긴 코드 컨텍스트·대형 리포",
+  },
+];
+
+/** Chat UI Standard slugs (not Task defaults) */
+export const CURSOR_UI_STANDARD_SLUGS = ["composer-2.5"] as const;
+
+/** Enabled in Cursor Task/agent UI — SSOT for recommend on host=cursor */
 export const CURSOR_TASK_ENABLED_SLUGS = [
   "composer-2.5-fast",
   "claude-sonnet-5-thinking-high",
+  "claude-opus-5-thinking-high",
   "claude-opus-4-8-thinking-high",
   "claude-fable-5-thinking-high",
   "cursor-grok-4.6-high-fast",
+  "cursor-grok-4.5-high-fast",
   "gpt-5.6-sol-medium",
   "gpt-5.6-terra-medium",
   "kimi-k2.7-code",
@@ -101,7 +182,7 @@ export const CURSOR_CHAT_ONLY = [
 ] as const;
 
 export const FULL_LADDER_DOC =
-  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini/Nano · mid: Sonnet/Opus/Fable/Grok/Sol · high: Terra/Codex";
+  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini/Nano · mid: Sonnet/Opus 4.8/Opus 5/Fable/Grok/Sol/Kimi · high: Terra/Codex";
 
 export const LIGHTEST_BY_HOST_DOC = {
   ko: "Haiku는 Claude light 예시, Cursor light=Composer, GPT light=Mini/Nano — 호스트마다 lightest id가 다름.",
@@ -126,10 +207,12 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Composer 2.5": "claude-haiku-4-5-20251001",
       "Claude Sonnet": "claude-sonnet-4-5-20250929",
       "Claude Opus": "claude-opus-4-20250514",
+      "Opus 5": "claude-opus-4-20250514",
       "Fable 5": "claude-sonnet-4-5-20250929",
       "Grok 5.x": "claude-sonnet-4-5-20250929",
       "GPT-5 Sol": "claude-sonnet-4-5-20250929",
       "GPT-5 Codex": "claude-opus-4-20250514",
+      "Kimi K2.7": "claude-sonnet-4-5-20250929",
     },
   },
   openai: {
@@ -141,10 +224,12 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Composer 2.5": "gpt-4.1-mini",
       "Claude Sonnet": "gpt-4.1",
       "Claude Opus": "o4-mini",
+      "Opus 5": "o4-mini",
       "Fable 5": "gpt-4.1",
       "Grok 5.x": "o4-mini",
       "GPT-5 Sol": "gpt-4.1",
       "GPT-5 Codex": "o3",
+      "Kimi K2.7": "gpt-4.1",
     },
   },
   generic: {
@@ -157,10 +242,12 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Composer 2.5": "role:lightest",
       "Claude Sonnet": "role:sonnet",
       "Claude Opus": "role:opus",
+      "Opus 5": "role:opus5",
       "Fable 5": "role:mid",
       "Grok 5.x": "role:design",
       "GPT-5 Sol": "role:sol",
       "GPT-5 Codex": "role:heavy",
+      "Kimi K2.7": "role:kimi",
     },
   },
 };
@@ -196,9 +283,10 @@ export function listHostProfiles(): Array<{
   full_ladder?: string;
   cursor_catalog?: {
     task_enabled_slugs: readonly string[];
+    standard_slugs: readonly string[];
+    catalog: typeof CURSOR_MODEL_CATALOG;
     blocked_labels: readonly string[];
     chat_only: readonly { name: string; note: string }[];
-    optional_slugs: string[];
   };
   unavailable_roles?: ModelId[];
   fallback_note?: string;
@@ -234,13 +322,13 @@ export function listHostProfiles(): Array<{
       ...(id === "cursor"
         ? {
             ladders:
-              "light: Composer · Claude: Sonnet < Opus < Fable · GPT: Sol < Terra · design: Grok/Fable/Opus/Sonnet",
+              "light: Composer · Claude: Sonnet < Opus 4.8 < Opus 5 < Fable · GPT: Sol < Terra · design: Grok/Fable/Opus/Sonnet · code context: Kimi",
             cursor_catalog: {
               task_enabled_slugs: CURSOR_TASK_ENABLED_SLUGS,
-              standard_slugs: ["composer-2.5"],
+              standard_slugs: CURSOR_UI_STANDARD_SLUGS,
+              catalog: CURSOR_MODEL_CATALOG,
               blocked_labels: CURSOR_BLOCKED_LABELS,
               chat_only: CURSOR_CHAT_ONLY,
-              optional_slugs: ["kimi-k2.7-code"],
             },
           }
         : {}),

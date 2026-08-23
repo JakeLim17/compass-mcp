@@ -13,6 +13,7 @@ import {
   resolveModelIdFromHostId,
   isHostIdAvailable,
   hostModelId,
+  CURSOR_UI_STANDARD_SLUGS,
 } from "./hosts.js";
 import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -24,10 +25,12 @@ export type ModelId =
   | "Composer 2.5"
   | "Claude Sonnet"
   | "Claude Opus"
+  | "Opus 5"
   | "Fable 5"
   | "Grok 5.x"
   | "GPT-5 Sol"
-  | "GPT-5 Codex";
+  | "GPT-5 Codex"
+  | "Kimi K2.7";
 
 /** Relative cost/weight — not dollar amounts */
 export type CostTier = "low" | "medium" | "medium-high" | "high";
@@ -80,9 +83,11 @@ export const CURSOR_LEGACY_STANDARD_SLUG: Record<string, ModelId> = {
 export const CURSOR_AGENT_CATALOG = [
   "composer-2.5-fast",
   "claude-sonnet-5-thinking-high",
+  "claude-opus-5-thinking-high",
   "claude-opus-4-8-thinking-high",
   "claude-fable-5-thinking-high",
   "cursor-grok-4.6-high-fast",
+  "cursor-grok-4.5-high-fast",
   "gpt-5.6-sol-medium",
   "gpt-5.6-terra-medium",
   "kimi-k2.7-code",
@@ -95,10 +100,13 @@ export const CURSOR_LEGACY_SLUGS: Record<string, ModelId> = {
 
 export type CursorCatalogSlug = (typeof CURSOR_AGENT_CATALOG)[number];
 
-export const CURSOR_CATALOG_SET = new Set<string>(CURSOR_AGENT_CATALOG);
+export const CURSOR_CATALOG_SET = new Set<string>([
+  ...CURSOR_AGENT_CATALOG,
+  ...CURSOR_UI_STANDARD_SLUGS,
+]);
 
-/** Optional: resolve/sticky only — not in default MODELS scoring */
-export const CURSOR_OPTIONAL_SLUGS = new Set<string>(["kimi-k2.7-code"]);
+/** Resolve/sticky only — not default-scored */
+export const CURSOR_OPTIONAL_SLUGS = new Set<string>([]);
 
 /**
  * Claude-family ladder (logical roles). Lightest host id varies:
@@ -108,6 +116,7 @@ export const CLAUDE_FAMILY_LADDER: ModelId[] = [
   LIGHTEST_LOGICAL,
   "Claude Sonnet",
   "Claude Opus",
+  "Opus 5",
   "Fable 5",
 ];
 
@@ -124,10 +133,12 @@ export const COST_TIER: Record<ModelId, CostTier> = {
   "Composer 2.5": "low",
   "Claude Sonnet": "medium",
   "Claude Opus": "medium-high",
+  "Opus 5": "medium-high",
   "Fable 5": "medium-high",
   "Grok 5.x": "medium-high",
   "GPT-5 Sol": "medium-high",
   "GPT-5 Codex": "high",
+  "Kimi K2.7": "medium",
 };
 
 /** Coarse tier */
@@ -135,10 +146,12 @@ export const MODEL_TIER: Record<ModelId, ModelTier> = {
   "Composer 2.5": "low",
   "Claude Sonnet": "mid",
   "Claude Opus": "mid",
+  "Opus 5": "high",
   "Fable 5": "mid",
   "Grok 5.x": "mid",
   "GPT-5 Sol": "mid",
   "GPT-5 Codex": "high",
+  "Kimi K2.7": "mid",
 };
 
 /** Approximate relative burn vs Composer Standard=1× — Fast ≈6× input (docs pricing) */
@@ -148,7 +161,11 @@ const RELATIVE_COST: Record<ModelId, UsageEstimate> = {
     en: "Composer Standard ≈1× ($0.5/$2.5) — Fast ≈6× ($3/$15); use Standard for light work",
   },
   "Claude Sonnet": { ko: "Sonnet ≈2×", en: "Sonnet ≈2×" },
-  "Claude Opus": { ko: "Opus ≈2–3×", en: "Opus ≈2–3×" },
+  "Claude Opus": { ko: "Opus 4.8 ≈2–3×", en: "Opus 4.8 ≈2–3×" },
+  "Opus 5": {
+    ko: "Opus 5 ≈2–3× (Fable급, 드물게만)",
+    en: "Opus 5 ≈2–3× (Fable-class — use rarely)",
+  },
   "Fable 5": { ko: "Fable ≈2–3×", en: "Fable ≈2–3×" },
   "Grok 5.x": {
     ko: "Grok 4.6 Standard ≈2× Composer Standard — Fast ≈2× Standard; 설계·장기 에이전트, 일상 패치는 Composer Standard",
@@ -156,6 +173,10 @@ const RELATIVE_COST: Record<ModelId, UsageEstimate> = {
   },
   "GPT-5 Sol": { ko: "Sol ≈2–3×", en: "Sol ≈2–3×" },
   "GPT-5 Codex": { ko: "Codex/Terra ≈4–5× (고비용)", en: "Codex/Terra ≈4–5× (high)" },
+  "Kimi K2.7": {
+    ko: "Kimi K2.7 ≈1.5–2× — 긴 코드 컨텍스트·저가 대안",
+    en: "Kimi K2.7 ≈1.5–2× — long code context, lower-cost option",
+  },
 };
 
 export function costTierToWeight(tier: CostTier): CostWeight {
@@ -174,8 +195,12 @@ const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
     ko: "저가 Claude mid — Fable보다 싸게 품질 유지",
   },
   "Claude Opus": {
-    en: "stronger Claude than Sonnet — still below Fable",
-    ko: "Sonnet보다 강한 Claude — Fable 아래 한 단",
+    en: "Opus 4.8 — stronger Claude than Sonnet",
+    ko: "Opus 4.8 — Sonnet보다 강한 Claude",
+  },
+  "Opus 5": {
+    en: "Opus 5 — extreme difficulty / huge scope only (rare)",
+    ko: "Opus 5 — 초대형·최고 난이도만 (드물게)",
   },
   "Fable 5": {
     en: "mid-weight multi-file / UI job (Cursor high Claude)",
@@ -192,6 +217,10 @@ const USAGE_ESTIMATE: Record<ModelId, UsageEstimate> = {
   "GPT-5 Codex": {
     en: "Terra/Codex-class — prefer when stuck on CI/hard bugs",
     ko: "Terra/Codex급 — CI·난해한 버그에 막혔을 때",
+  },
+  "Kimi K2.7": {
+    en: "Kimi K2.7 — long codebase reads / code-heavy context",
+    ko: "Kimi K2.7 — 긴 코드 컨텍스트·대형 리포 분석",
   },
 };
 
@@ -222,10 +251,12 @@ export const CURSOR_TASK_SLUG: Record<ModelId, string> = {
   "Composer 2.5": "composer-2.5-fast",
   "Claude Sonnet": "claude-sonnet-5-thinking-high",
   "Claude Opus": "claude-opus-4-8-thinking-high",
+  "Opus 5": "claude-opus-5-thinking-high",
   "Fable 5": "claude-fable-5-thinking-high",
   "Grok 5.x": "cursor-grok-4.6-high-fast",
   "GPT-5 Sol": "gpt-5.6-sol-medium",
   "GPT-5 Codex": "gpt-5.6-terra-medium",
+  "Kimi K2.7": "kimi-k2.7-code",
 };
 
 const SLUG_TO_MODEL: Record<string, ModelId> = {
@@ -269,9 +300,12 @@ export function resolveModelId(raw?: string | null): ModelId | null {
   if (lower.includes("composer")) return LIGHTEST_LOGICAL;
   if (lower.includes("mini") || lower.includes("nano")) return LIGHTEST_LOGICAL;
   if (lower.includes("sonnet")) return "Claude Sonnet";
+  if (lower.includes("opus 5") || lower.includes("opus5") || lower.includes("오퍼스 5"))
+    return "Opus 5";
   if (lower.includes("opus")) return "Claude Opus";
   if (lower.includes("fable")) return "Fable 5";
   if (lower.includes("grok")) return "Grok 5.x";
+  if (lower.includes("kimi") || lower.includes("키미")) return "Kimi K2.7";
   if (lower.includes("terra") || lower.includes("codex")) return "GPT-5 Codex";
   if (lower.includes("sol") || lower === "gpt-5.6-sol-medium") return "GPT-5 Sol";
   if (lower.includes("gpt-5") || lower.includes("gpt5")) return "GPT-5 Codex";
@@ -396,10 +430,12 @@ const MODELS: ModelId[] = [
   "Composer 2.5",
   "Claude Sonnet",
   "Claude Opus",
+  "Opus 5",
   "Fable 5",
   "Grok 5.x",
   "GPT-5 Sol",
   "GPT-5 Codex",
+  "Kimi K2.7",
 ];
 
 /** 기본 비중 반영 베이스 점수 */
@@ -407,10 +443,12 @@ const BASE: Record<ModelId, number> = {
   "Composer 2.5": 40,
   "Claude Sonnet": 12,
   "Claude Opus": 6,
+  "Opus 5": 2,
   "Fable 5": 15,
   "Grok 5.x": 10,
   "GPT-5 Sol": 4,
   "GPT-5 Codex": 5,
+  "Kimi K2.7": 6,
 };
 
 const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
@@ -426,6 +464,7 @@ const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
     "Fable 5": 38,
     "Grok 5.x": 32,
     "Claude Opus": 28,
+    "Opus 5": 8,
     "Claude Sonnet": 14,
   },
   test: {
@@ -454,8 +493,17 @@ const KEYWORD_RULES: Array<{
       "Fable 5": 32,
       "Grok 5.x": 30,
       "Claude Opus": 22,
+      "Opus 5": 6,
       "Claude Sonnet": 10,
     },
+  },
+  {
+    re: /긴\s*컨텍스트|long[- ]?context|대형\s*코드|whole\s*repo|수천\s*줄|코드베이스\s*전체\s*(분석|읽|훑)|large\s*codebase\s*(review|read)|many\s*files.*(?:read|분석|리뷰)/i,
+    boost: { "Kimi K2.7": 42, "Claude Sonnet": 10, "Composer 2.5": -8 },
+  },
+  {
+    re: /최고\s*난이도|초대형|극한|maximum\s*effort|hardest|opus\s*5|오퍼스\s*5/i,
+    boost: { "Opus 5": 35, "GPT-5 Codex": 12, "Grok 5.x": 8 },
   },
   {
     re: /간단\s*계획|짧은\s*기획|가벼운\s*설계|light\s*plan|quick\s*plan|sketch/i,
@@ -538,6 +586,7 @@ export const DESIGN_ROLE_MODELS: ModelId[] = [
   "Fable 5",
   "Grok 5.x",
   "Claude Opus",
+  "Opus 5",
   "Claude Sonnet",
 ];
 
@@ -546,6 +595,7 @@ export const DESIGN_HANDOFF_MODELS: ModelId[] = [
   "Fable 5",
   "Grok 5.x",
   "Claude Opus",
+  "Opus 5",
 ];
 
 export function isDesignRoleModel(model: ModelId): boolean {
@@ -636,6 +686,24 @@ const SAVE_BUDGET_RE =
 
 const LARGE_UI_RE =
   /전면\s*(리)?디자인|전체\s*ui|ui\s*전면|large\s*ui|redesign\s*(entire|whole|all)|멀티\s*파일\s*ui|넓은\s*(화면|레이아웃)|히어로\s*.*랜딩|랜딩\s*.*히어로/i;
+
+/** Long code context read — Kimi tier (not design/planning) */
+export const LONG_CODE_CONTEXT_RE =
+  /긴\s*컨텍스트|long[- ]?context|whole\s*repo|코드베이스\s*전체\s*(분석|읽|훑)|large\s*codebase\s*(review|read)|many\s*files.*(?:read|분석|리뷰)/i;
+
+export function isLongCodeContextTask(text: string, tags: Tag[] = []): boolean {
+  const t = text ?? "";
+  if (!LONG_CODE_CONTEXT_RE.test(t)) return false;
+  if (isCopyOnlyTask(t) || isLightUiCopyOrFontTask(t, tags)) return false;
+  // design/planning verbs without read/analyze → not Kimi primary
+  if (
+    /설계|기획|트레이드.?오프|wireframe|와이어/i.test(t) &&
+    !/(분석|읽|review|read|훑)/i.test(t)
+  ) {
+    return false;
+  }
+  return true;
+}
 
 /** Copy/i18n/typo only — host lightest tier (not mid models) */
 export const COPY_ONLY_RE =
@@ -818,6 +886,8 @@ export interface CommandSignals {
   implementation: boolean;
   /** i18n/copy/typo — host lightest tier, not Sonnet/Fable */
   copy_only: boolean;
+  /** Long codebase read / code-heavy context — Kimi tier */
+  long_code_context: boolean;
   /** Hero slogan / font apply / narrow CTA — Composer wins over UI tag */
   light_ui_copy: boolean;
   /** Dashboard layout refactor / multi-file UI — Fable tier */
@@ -852,6 +922,7 @@ export function analyzeCommand(
     /설계|구조|아키텍처|트레이드.?오프|기술\s*선택|의사결정|기획|계획/i.test(t);
   const implementation = isImplementationTask(t);
   const copy_only = isCopyOnlyTask(t);
+  const long_code_context = isLongCodeContextTask(t, tags);
   const light_ui_copy =
     isLightUiCopyOrFontTask(t, tags) &&
     (LIGHT_COPY_RE.test(t) ||
@@ -922,6 +993,8 @@ export function analyzeCommand(
     why = "레이아웃·멀티파일 UI 리팩터 → Fable";
   } else if (large_ui) {
     why = "넓은 UI 리디자인 → Fable 에스컬레이션";
+  } else if (long_code_context) {
+    why = "긴 코드 컨텍스트·대형 리포 분석 → Kimi (설계/기획 아님)";
   } else if (copy_only) {
     why = "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
   } else if (light_ui_copy) {
@@ -946,6 +1019,7 @@ export function analyzeCommand(
     ui,
     implementation,
     copy_only,
+    long_code_context,
     light_ui_copy,
     ui_layout_refactor,
     context_informed,
@@ -1003,10 +1077,14 @@ export function buildFallbackModels(
     candidates = ["Claude Opus", "Claude Sonnet", "Composer 2.5"];
   } else if (primary === "Claude Opus") {
     candidates = ["Claude Sonnet", "Composer 2.5"];
+  } else if (primary === "Opus 5") {
+    candidates = ["Fable 5", "Grok 5.x", "Claude Sonnet", "Composer 2.5"];
   } else if (primary === "Claude Sonnet") {
     candidates = ["Composer 2.5"];
   } else if (primary === "Grok 5.x") {
     candidates = ["Fable 5", "Claude Sonnet", "Composer 2.5"];
+  } else if (primary === "Kimi K2.7") {
+    candidates = ["Claude Sonnet", "Composer 2.5"];
   } else if (opts?.hardBug && primary !== "Composer 2.5") {
     candidates = ["GPT-5 Sol", "Claude Sonnet", "Composer 2.5"];
   } else {
@@ -1217,6 +1295,18 @@ function buildCostAdvice(
       en: "Grok 4.6 fits broad design / long agents; daily patches & UI → Composer/Sonnet",
     };
   }
+  if (primary === "Opus 5") {
+    return {
+      ko: "Opus 5 — 초대형·최고 난이도만. 평소 Sonnet/Fable/Grok 우선",
+      en: "Opus 5 — extreme scope only. Prefer Sonnet/Fable/Grok normally",
+    };
+  }
+  if (primary === "Kimi K2.7") {
+    return {
+      ko: "Kimi K2.7 — 긴 코드 컨텍스트·대형 리포. 짧은 패치는 Composer",
+      en: "Kimi K2.7 — long code context / large repo. Short patches → Composer",
+    };
+  }
   if (primary === "GPT-5 Codex") {
     return signals.hard_bug
       ? {
@@ -1321,12 +1411,14 @@ function applyProjectConfig(
     if (!opts?.skipDesignPenalty) {
       scores["Grok 5.x"] -= 4;
       scores["Fable 5"] -= 4;
+      scores["Opus 5"] -= 8;
     }
   } else if (isQualityBias(cfg)) {
     scores["GPT-5 Codex"] += 8;
     scores["Grok 5.x"] += 6;
     scores["Fable 5"] += 4;
     scores["Claude Opus"] += 4;
+    scores["Opus 5"] += 3;
   }
   if (!cfg) {
     // still apply blocked from empty
@@ -1525,12 +1617,43 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     if (signals.budget === "premium") {
       scores["Grok 5.x"] += 14;
       scores["Fable 5"] += 10;
-      scores["Claude Opus"] += 8;
+      scores["Opus 5"] += 12;
+      scores["Claude Opus"] += 6;
     }
     if (prefer_cheaper && signals.budget !== "premium") {
       scores["Claude Sonnet"] += 8;
       scores["Grok 5.x"] += 2;
+      scores["Opus 5"] -= 10;
     }
+  }
+
+  // Long code context — Kimi competes with Sonnet (not light copy / layout refactor)
+  if (
+    signals.long_code_context &&
+    !hardBug &&
+    !signals.ui_layout_refactor &&
+    !blocked.has("Kimi K2.7")
+  ) {
+    scores["Kimi K2.7"] += 55;
+    scores["Claude Sonnet"] += 10;
+    scores["Fable 5"] -= 20;
+    scores["Composer 2.5"] -= 25;
+    scores["Grok 5.x"] -= 8;
+  }
+
+  // Extreme difficulty — Opus 5 rarely (premium or explicit)
+  if (
+    !hardBug &&
+    !blocked.has("Opus 5") &&
+    (signals.budget === "premium" ||
+      /최고\s*난이도|초대형|극한|opus\s*5|오퍼스\s*5|maximum\s*effort|hardest/i.test(
+        text,
+      )) &&
+    (signals.scope === "huge" || signals.scope === "broad" || signals.architecture)
+  ) {
+    scores["Opus 5"] += 45;
+    scores["Fable 5"] += 5;
+    scores["Composer 2.5"] -= 20;
   }
 
   // Copy/i18n/typo / hero slogan / font apply → host lightest logical role
@@ -1588,6 +1711,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     if (bugPrimary && primary !== bugPrimary) {
       alternative = primary === bugPrimary ? alternative : primary;
       primary = bugPrimary;
+    }
+  } else if (
+    signals.long_code_context &&
+    !hardBug &&
+    !blocked.has("Kimi K2.7")
+  ) {
+    if (primary !== "Kimi K2.7") {
+      alternative = primary;
+      primary = "Kimi K2.7";
     }
   } else if (
     (signals.ui_layout_refactor || signals.large_ui) &&

@@ -108,6 +108,24 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Tiny hotfix: tidy a typo comment and a small lint warning",
     expected_primary: "Composer 2.5",
   },
+  {
+    category: "architecture",
+    ko: "전체 코드베이스 긴 컨텍스트로 구조 분석해줘",
+    en: "Analyze the whole repo structure with long code context",
+    tags: ["architecture"],
+    expected_primary: "Kimi K2.7",
+    expected_primaries: ["Kimi K2.7", "Claude Sonnet", "Grok 5.x"],
+    note: "Long codebase read → Kimi competes with Sonnet; not Composer.",
+  },
+  {
+    category: "architecture",
+    ko: "초대형 마이크로서비스 설계 — 최고 난이도, 비싸도 됨",
+    en: "Huge microservices design — maximum effort, premium OK",
+    tags: ["architecture"],
+    expected_primary: "Opus 5",
+    expected_primaries: ["Opus 5", "Grok 5.x", "Fable 5"],
+    note: "Extreme scope + premium → Opus 5 rarely wins.",
+  },
   // —— recommend again ——
   {
     category: "recommend_again",

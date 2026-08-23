@@ -7,10 +7,12 @@ export type VerbalModelId =
   | "Composer 2.5"
   | "Claude Sonnet"
   | "Claude Opus"
+  | "Opus 5"
   | "Fable 5"
   | "Grok 5.x"
   | "GPT-5 Sol"
-  | "GPT-5 Codex";
+  | "GPT-5 Codex"
+  | "Kimi K2.7";
 
 export interface VerbalOverrideResult {
   model: VerbalModelId;
@@ -75,10 +77,22 @@ const RULES: VerbalRule[] = [
     en: /\b(?:use|with)\s+sonnet\b/i,
   },
   {
+    model: "Opus 5",
+    label: "Opus 5",
+    ko: KO_MODEL_DIRECTIVE("(?:오퍼스\\s*5|opus\\s*5)", true),
+    en: /\b(?:use|with)\s+opus\s*5\b/i,
+  },
+  {
     model: "Claude Opus",
-    label: "Opus",
+    label: "Opus 4.8",
     ko: KO_MODEL_DIRECTIVE("(?:오퍼스|opus)", true),
     en: /\b(?:use|with)\s+opus\b/i,
+  },
+  {
+    model: "Kimi K2.7",
+    label: "Kimi",
+    ko: KO_MODEL_DIRECTIVE("(?:키미|kimi)", true),
+    en: /\b(?:use|with)\s+kimi\b/i,
   },
   {
     model: "GPT-5 Sol",

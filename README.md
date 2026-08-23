@@ -40,12 +40,30 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 
 | You're doing… | Typical pick |
 |---------------|--------------|
-| Copy, i18n, one-line fix | Composer **Standard** (Cursor, Fast 아님) · Haiku (Claude) · Mini (Codex) |
-| Small code patch | Same light tier — **Standard over Fast** (Composer $0.5 vs Fast $3 input) |
-| UI / multi-file layout | Sonnet |
-| Big UI redesign | Fable |
-| Design, planning, tradeoffs | Fable · Grok · Opus · Sonnet |
-| Hard bug, CI, type errors | Codex |
+| Copy, i18n, one-line fix | Composer **Standard** (`composer-2.5` UI; Task `composer-2.5-fast`) |
+| Small code patch | Same light tier — **Standard over Fast** |
+| General UI | Sonnet (`claude-sonnet-5-thinking-high`) |
+| Multi-file UI / layout refactor | Fable (`claude-fable-5-thinking-high`) |
+| Design, planning, tradeoffs | Grok 4.6 · Fable · Opus · Sonnet |
+| Hard bug, CI, type errors | Sol → Terra/Codex (`gpt-5.6-sol-medium` → `gpt-5.6-terra-medium`) |
+| Long codebase / code context | Kimi K2.7 (`kimi-k2.7-code`) |
+| Extreme / huge scope (rare) | Opus 5 (`claude-opus-5-thinking-high`) |
+
+### Cursor catalog (Task slugs)
+
+| Slug | Role | Cost tier |
+|------|------|-----------|
+| `composer-2.5` | Chat UI Standard (light work) | low |
+| `composer-2.5-fast` | Task fallback for Composer | low |
+| `claude-sonnet-5-thinking-high` | General UI / mid Claude | medium |
+| `claude-opus-4-8-thinking-high` | Opus 4.8 (legacy) | medium-high |
+| `claude-opus-5-thinking-high` | Extreme difficulty (rare) | medium-high |
+| `claude-fable-5-thinking-high` | Multi-file UI | medium-high |
+| `cursor-grok-4.6-high-fast` | Design / planning (default Grok) | medium-high |
+| `cursor-grok-4.5-high-fast` | Grok 4.5 legacy | medium-high |
+| `gpt-5.6-sol-medium` | Lighter bug/CI probe | medium-high |
+| `gpt-5.6-terra-medium` | Hard bug / Terra | high |
+| `kimi-k2.7-code` | Long code context | medium |
 
 "Lightest" depends on the host — Cursor's cheap slot is Composer, not Haiku. If the top pick isn't available, it falls back to the next in the list.
 
@@ -74,4 +92,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.4+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.7+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).

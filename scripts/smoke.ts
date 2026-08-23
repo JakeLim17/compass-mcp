@@ -948,6 +948,42 @@ try {
   if (!detectOk) failed += 1;
 }
 
+{
+  const catalogOk =
+    CURSOR_AGENT_CATALOG.length >= 10 &&
+    CURSOR_AGENT_CATALOG.includes("claude-opus-5-thinking-high") &&
+    CURSOR_AGENT_CATALOG.includes("cursor-grok-4.5-high-fast") &&
+    CURSOR_AGENT_CATALOG.includes("kimi-k2.7-code");
+  console.log(
+    `[${catalogOk ? "OK" : "FAIL"}] cursor_catalog_slugs=${CURSOR_AGENT_CATALOG.length}`,
+  );
+  extraChecks += 1;
+  if (!catalogOk) failed += 1;
+}
+
+{
+  const kimi = recommendModel({
+    task_description: "whole repo 긴 컨텍스트로 코드베이스 전체 분석",
+    tags: ["architecture"],
+  });
+  const opus5 = recommendModel({
+    task_description: "초대형 마이크로서비스 설계 — 최고 난이도, 비싸도 됨",
+    tags: ["architecture"],
+  });
+  const extOk =
+    kimi.primary === "Kimi K2.7" &&
+    kimi.primary_slug === "kimi-k2.7-code" &&
+    kimi.candidates.length >= 2 &&
+    opus5.primary === "Opus 5" &&
+    opus5.primary_slug === "claude-opus-5-thinking-high" &&
+    opus5.candidates.length >= 2;
+  console.log(
+    `[${extOk ? "OK" : "FAIL"}] kimi=${kimi.primary} opus5=${opus5.primary}`,
+  );
+  extraChecks += 1;
+  if (!extOk) failed += 1;
+}
+
 const total = cases.length + EXAMPLE_PROMPTS.length + extraChecks;
 if (failed > 0) {
   console.error(`smoke failed: ${failed}/${total}`);
