@@ -40,8 +40,8 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 
 | You're doing… | Typical pick |
 |---------------|--------------|
-| Copy, i18n, one-line fix | Composer (Cursor) · Haiku (Claude) · Mini (Codex) |
-| Small code patch | Same light tier |
+| Copy, i18n, one-line fix | Composer **Standard** (Cursor, Fast 아님) · Haiku (Claude) · Mini (Codex) |
+| Small code patch | Same light tier — **Standard over Fast** (Composer $0.5 vs Fast $3 input) |
 | UI / multi-file layout | Sonnet |
 | Big UI redesign | Fable |
 | Design, planning, tradeoffs | Fable · Grok · Opus · Sonnet |
@@ -73,4 +73,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.1+). `npm run connect -- cursor|claude|codex` 한 줄 설치. 채팅에 그냥 "이 작업 모델 뭐 쓸까", "페이블로 문구 수정", "타입 에러 회귀 디버그"처럼 말하면 됨. 말로 모델 지정(`페이블로`, `코덱스로`)하면 점수보다 우선. **실작업·Multitask·서브에이전트는 `start_session`(compact) 항상** — 「부모 완료」「테스트 창」 핑계로 생략 금지. 「테스트야」는 MCP 호출·코드 수정만 금지. **설계(Fable/Grok/Opus) 끝나고 「구현 들어가」면 Sonnet으로 내려감** — 전면 리디자인·「페이블로」는 Fable 유지. 채팅 드롭다운은 자동 안 바뀜 — Cursor가 메인, 웹 HTTP는 필요할 때만.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.3+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장.

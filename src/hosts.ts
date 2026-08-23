@@ -9,7 +9,7 @@
  * Recheck slugs vs Cursor Models UI + docs/models-and-pricing (~monthly or on changelog).
  *
  * Lightest tier is **per host**, not a single Haiku slug:
- * - cursor → Composer (composer-2.5-fast)
+ * - cursor → Composer Standard (composer-2.5 UI; Task fallback composer-2.5-fast)
  * - claude → Haiku (claude-haiku-*)
  * - openai → Mini/Nano (gpt-4.1-mini)
  * Logical role for lightest scoring: ModelId "Composer 2.5".
@@ -112,7 +112,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
   cursor: {
     id: "cursor",
     display_name: "Cursor",
-    lightest_label: "Composer 2.5 (composer-2.5-fast)",
+    lightest_label: "Composer 2.5 Standard (composer-2.5; Task fallback composer-2.5-fast)",
     note:
       "Catalog slugs only. Task-fit primary + candidates fallback_chain — if primary_id unavailable, try candidates[1].id.",
     ids: { ...CURSOR_IDS },
@@ -237,6 +237,7 @@ export function listHostProfiles(): Array<{
               "light: Composer · Claude: Sonnet < Opus < Fable · GPT: Sol < Terra · design: Grok/Fable/Opus/Sonnet",
             cursor_catalog: {
               task_enabled_slugs: CURSOR_TASK_ENABLED_SLUGS,
+              standard_slugs: ["composer-2.5"],
               blocked_labels: CURSOR_BLOCKED_LABELS,
               chat_only: CURSOR_CHAT_ONLY,
               optional_slugs: ["kimi-k2.7-code"],

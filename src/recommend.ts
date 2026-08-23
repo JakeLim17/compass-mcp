@@ -62,6 +62,19 @@ export interface CostPreview {
  * Never recommend a slug outside this list for host=cursor.
  * kimi is optional (resolve/sticky OK; not default-scored).
  */
+/**
+ * Chat/subagent Standard (non-Fast) slugs — verified (Cursor forum cloud list, Aug 2026).
+ * Task inline `model` often exposes `-fast` only; Standard = UI picker Fast off or `.cursor/agents/` frontmatter.
+ */
+export const CURSOR_STANDARD_SLUG: Partial<Record<ModelId, string>> = {
+  "Composer 2.5": "composer-2.5",
+};
+
+/** Grok 4.5 legacy Standard (4.6 high non-fast not in cloud Task list yet — UI: turn Fast off) */
+export const CURSOR_LEGACY_STANDARD_SLUG: Record<string, ModelId> = {
+  "cursor-grok-4.5-high": "Grok 5.x",
+};
+
 /** Cursor docs: https://cursor.com/docs/models-and-pricing — recheck when new models ship */
 export const CURSOR_AGENT_CATALOG = [
   "composer-2.5-fast",
@@ -127,15 +140,18 @@ export const MODEL_TIER: Record<ModelId, ModelTier> = {
   "GPT-5 Codex": "high",
 };
 
-/** Approximate relative burn vs Composer=1× — heuristic, not billing */
+/** Approximate relative burn vs Composer Standard=1× — Fast ≈6× input (docs pricing) */
 const RELATIVE_COST: Record<ModelId, UsageEstimate> = {
-  "Composer 2.5": { ko: "Composer ≈1× (기준)", en: "Composer ≈1× (baseline)" },
+  "Composer 2.5": {
+    ko: "Composer Standard ≈1× ($0.5/$2.5) — Fast ≈6× ($3/$15), 간단 작업은 Standard",
+    en: "Composer Standard ≈1× ($0.5/$2.5) — Fast ≈6× ($3/$15); use Standard for light work",
+  },
   "Claude Sonnet": { ko: "Sonnet ≈2×", en: "Sonnet ≈2×" },
   "Claude Opus": { ko: "Opus ≈2–3×", en: "Opus ≈2–3×" },
   "Fable 5": { ko: "Fable ≈2–3×", en: "Fable ≈2–3×" },
   "Grok 5.x": {
-    ko: "Grok 4.6 Fast ≈4–6× (Composer Fast 대비) — 설계·장기 에이전트",
-    en: "Grok 4.6 Fast ≈4–6× vs Composer Fast — design / long agents",
+    ko: "Grok 4.6 Standard ≈2× Composer Standard — Fast ≈2× Standard; 설계·장기 에이전트, 일상 패치는 Composer Standard",
+    en: "Grok 4.6 Standard ≈2× Composer Standard — Fast ≈2× Standard; design/long agents; daily patches → Composer Standard",
   },
   "GPT-5 Sol": { ko: "Sol ≈2–3×", en: "Sol ≈2–3×" },
   "GPT-5 Codex": { ko: "Codex/Terra ≈4–5× (고비용)", en: "Codex/Terra ≈4–5× (high)" },
@@ -214,7 +230,14 @@ const SLUG_TO_MODEL: Record<string, ModelId> = {
       id,
     ]),
   ),
+  ...Object.fromEntries(
+    (Object.entries(CURSOR_STANDARD_SLUG) as [ModelId, string][]).map(([id, slug]) => [
+      slug,
+      id,
+    ]),
+  ),
   ...CURSOR_LEGACY_SLUGS,
+  ...CURSOR_LEGACY_STANDARD_SLUG,
 } as Record<string, ModelId>;
 
 export function isCursorCatalogSlug(slug: string): boolean {
@@ -328,6 +351,12 @@ export interface RecommendResult {
   sticky_suggest?: "keep_silent";
   /** Human-facing keep/switch line — no “sticky” word */
   model_persistence?: UsageEstimate;
+  /**
+   * Chat UI / parent agent picker — Standard (non-Fast) when Task slug is -fast only.
+   * e.g. composer-2.5 vs task primary_id composer-2.5-fast
+   */
+  ui_recommended_id?: string;
+  ui_recommended_note?: UsageEstimate;
   /** Task recommendation — distinct from the agent that called this MCP */
   for_task: {
     primary: ModelId;
@@ -598,6 +627,50 @@ const TINY_SCOPE_RE =
 
 export function isCopyOnlyTask(text: string): boolean {
   return COPY_ONLY_RE.test(text ?? "");
+}
+
+/** Light / copy / tiny — prefer Standard tier in chat UI (not Fast) */
+export function prefersStandardUi(signals: CommandSignals): boolean {
+  return (
+    signals.copy_only ||
+    signals.scope === "tiny" ||
+    (signals.scope === "local" &&
+      !signals.hard_bug &&
+      !signals.large_ui &&
+      !signals.architecture)
+  );
+}
+
+/** Standard chat slug when verified; null if UI-only (e.g. Grok 4.6 — turn Fast off in picker) */
+export function standardUiSlug(primary: ModelId): string | null {
+  return CURSOR_STANDARD_SLUG[primary] ?? null;
+}
+
+export function buildUiRecommendation(
+  primary: ModelId,
+  primary_id: string,
+  signals: CommandSignals,
+): { ui_recommended_id?: string; ui_recommended_note?: UsageEstimate } {
+  if (!prefersStandardUi(signals)) return {};
+  const standard = standardUiSlug(primary);
+  if (primary === LIGHTEST_LOGICAL && standard && primary_id.endsWith("-fast")) {
+    return {
+      ui_recommended_id: standard,
+      ui_recommended_note: {
+        ko: "간단 작업 → 채팅 UI에서 Composer 2.5 Standard(Fast 끄기). Task slug는 composer-2.5-fast fallback",
+        en: "Light work → chat UI Composer 2.5 Standard (Fast off). Task slug stays composer-2.5-fast fallback",
+      },
+    };
+  }
+  if (primary === "Grok 5.x" && primary_id.includes("-fast")) {
+    return {
+      ui_recommended_note: {
+        ko: "Grok 4.6 — 채팅 UI에서 Fast 끄고 Standard(High) 선택 (Task는 high-fast만 노출될 수 있음)",
+        en: "Grok 4.6 — chat UI: turn Fast off, pick Standard (High); Task may only expose high-fast",
+      },
+    };
+  }
+  return {};
 }
 
 const BROAD_SCOPE_RE =
@@ -875,14 +948,18 @@ function buildCostAdvice(
 
   if (light && (signals.copy_only || signals.scope === "tiny" || signals.scope === "local")) {
     const label = hostLightestLabel(host);
+    const standardHint =
+      host === "cursor" || resolveHostId(host) === "cursor"
+        ? " — Composer 2.5 **Standard**(Fast 아님, ≈6× 저렴)"
+        : "";
     return signals.copy_only
       ? {
-          ko: `문구/i18n/타이포 → lightest (${label}) — Sonnet/Fable/Codex는 과함`,
-          en: `Copy/i18n/typo → lightest (${label}) — Sonnet/Fable/Codex would be overkill`,
+          ko: `문구/i18n/타이포 → lightest (${label})${standardHint} — Sonnet/Fable/Codex는 과함`,
+          en: `Copy/i18n/typo → lightest (${label})${standardHint.replace("Standard", "Standard tier")} — Sonnet/Fable/Codex overkill`,
         }
       : {
-          ko: `작은 패치 → lightest tier — Codex·Fable은 과함`,
-          en: `Small patch → lightest tier — Codex/Fable would be overkill`,
+          ko: `작은 패치 → lightest tier${standardHint} — Codex·Fable·Fast는 과함`,
+          en: `Small patch → lightest tier${standardHint} — Codex/Fable/Fast overkill`,
         };
   }
   if (
@@ -1393,6 +1470,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
 
   const primary_id = hostModelId(host, primary);
   const primary_cost_tier = COST_TIER[primary];
+  const uiRec = buildUiRecommendation(primary, primary_id, signals);
 
   const base: RecommendResult = {
     primary,
@@ -1436,6 +1514,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       host,
     ),
     honest_limit: { ko: "", en: "" },
+    ...uiRec,
     ...(verbal
       ? {
           verbal_override: {
@@ -1520,16 +1599,29 @@ export function buildRunHint(result: RecommendResult): {
   en: string;
   task_model: string;
   fallback_model: string;
+  ui_model?: string;
 } {
   const fb =
     result.candidates[1]?.id ??
     result.candidates[1]?.slug ??
     result.cheaper_fallback_slug;
+  const ui = result.ui_recommended_id;
+  const uiKo = ui
+    ? `채팅 UI=${ui}(Standard, Fast 아님) · `
+    : result.ui_recommended_note?.ko
+      ? `${result.ui_recommended_note.ko} · `
+      : "";
+  const uiEn = ui
+    ? `chat UI=${ui} (Standard, not Fast) · `
+    : result.ui_recommended_note?.en
+      ? `${result.ui_recommended_note.en} · `
+      : "";
   return {
     task_model: result.primary_id,
     fallback_model: fb,
-    ko: `다음 Task model=${result.primary_id} (불가 시 ${fb}) → log_model_usage → set_sticky`,
-    en: `Next Task model=${result.primary_id} (if unavailable ${fb}) → log_model_usage → set_sticky`,
+    ...(ui ? { ui_model: ui } : {}),
+    ko: `${uiKo}Task model=${result.primary_id} (불가 시 ${fb}) → log_model_usage → set_sticky`,
+    en: `${uiEn}Task model=${result.primary_id} (if unavailable ${fb}) → log_model_usage → set_sticky`,
   };
 }
 
@@ -1552,6 +1644,9 @@ export function compactGateRecommend(
     model_persistence: result.model_persistence?.ko ?? null,
     cost_advice: cost_preview.advice.ko,
     run_hint: run_hint.ko,
+    ...(result.ui_recommended_id
+      ? { ui_recommended_id: result.ui_recommended_id }
+      : {}),
   };
 }
 
@@ -1585,6 +1680,12 @@ export function compactRecommendResult(
     run_hint,
     must_do,
     agent_note: AGENT_NOTE,
+    ...(result.ui_recommended_id
+      ? { ui_recommended_id: result.ui_recommended_id }
+      : {}),
+    ...(result.ui_recommended_note
+      ? { ui_recommended_note: result.ui_recommended_note }
+      : {}),
     ...(result.stick_action
       ? {
           stick_action: result.stick_action,

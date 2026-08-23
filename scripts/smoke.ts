@@ -697,6 +697,27 @@ try {
 }
 
 {
+  const light = recommendModel({
+    task_description: "로그인 문구 i18n 한 줄 수정",
+  });
+  const gate = compactGateRecommend(light);
+  const standardOk =
+    light.primary === "Composer 2.5" &&
+    light.primary_id === "composer-2.5-fast" &&
+    light.ui_recommended_id === "composer-2.5" &&
+    typeof gate.cost_advice === "string" &&
+    gate.cost_advice.includes("Standard") &&
+    typeof gate.run_hint === "string" &&
+    gate.run_hint.includes("composer-2.5") &&
+    gate.run_hint.includes("Standard");
+  console.log(
+    `[${standardOk ? "OK" : "FAIL"}] light_patch ui=${light.ui_recommended_id} task=${light.primary_id}`,
+  );
+  extraChecks += 1;
+  if (!standardOk) failed += 1;
+}
+
+{
   const grokSlug = CURSOR_TASK_SLUG["Grok 5.x"];
   const legacyOk =
     grokSlug === "cursor-grok-4.6-high-fast" &&
