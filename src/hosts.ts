@@ -365,7 +365,7 @@ export function listHostProfiles(): Array<{
       ...(id === "cursor"
         ? {
             ladders:
-              "light: Composer · Claude: Sonnet < Opus 4.8 < Opus 5 < Fable · GPT: Sol < Terra · design: Grok/Fable/Opus/Sonnet · code context: Kimi",
+              "light: Composer · Cursor pool: Composer+Grok · design/plan: Grok · multi-file UI: Fable · Other(Sonnet/Opus/GPT): when needed · code context: Kimi",
             cursor_catalog: {
               task_enabled_slugs: CURSOR_TASK_ENABLED_SLUGS,
               standard_slugs: CURSOR_UI_STANDARD_SLUGS,

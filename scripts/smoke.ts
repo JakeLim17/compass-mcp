@@ -124,7 +124,7 @@ const cases: Case[] = [
       task_description: "결제 모듈 구조 설계와 기술 선택",
       tags: ["architecture"],
     },
-    expectPrimary: "Fable 5",
+    expectPrimary: "Grok 5.x",
     expectCost: "medium-high",
   },
   {
@@ -242,7 +242,7 @@ const cases: Case[] = [
   {
     name: "premium UI → Fable",
     input: {
-      task_description: "대시보드 레이아웃 — 최고 품질로, 비싸도 됨",
+      task_description: "대시보드 레이아웃 리팩터 — 최고 품질로, 비싸도 됨",
       tags: ["ui"],
       project_config: { cost_bias: "quality" },
     },
@@ -827,9 +827,9 @@ try {
     claude.primary === "GPT-5 Codex" &&
     claude.cheaper_fallback.name === "GPT-5 Sol" &&
     claude.candidates.length >= 2 &&
-    openai.primary === "Fable 5" &&
+    openai.primary === "Grok 5.x" &&
     generic.host === "generic" &&
-    generic.primary_id === "role:sonnet" &&
+    generic.primary_id === "role:lightest" &&
     vscode.host === "generic" &&
     vscode.candidates.length >= 2;
   console.log(

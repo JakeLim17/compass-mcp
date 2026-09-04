@@ -1,9 +1,9 @@
 /**
  * ChronoCode model scoring SSOT.
- * Goal: task-fit model — not “always cheapest”, not vendor-locked.
- * Light patch / copy / hyphen-punctuation → host lightest (Cursor=Composer, Claude=Haiku, GPT=Mini) · UI → Sonnet/Fable
- * · design/plan → Fable/Grok/Opus/Sonnet · hard CI/bug → Codex/Terra.
- * Claude ladder: lightest < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex
+ * Goal: task-fit model — Cursor Models pool first (Composer + Grok), Other models restrained.
+ * Light patch / copy / hyphen → Composer · design/plan/medium+ → Grok (don’t under-use Cursor pool)
+ * · multi-file UI / layout refactor → Fable · hard CI/bug → Sol/Terra (Other, when stuck)
+ * Not “always cheapest Composer” — match difficulty; Grok is Cursor pool even at ~2× Composer.
  * Only recommend Cursor catalog slugs for host=cursor.
  */
 import {
@@ -127,7 +127,7 @@ export const CLAUDE_FAMILY_LADDER: ModelId[] = [
 export const GPT_FAMILY_LADDER: ModelId[] = ["GPT-5 Sol", "GPT-5 Codex"];
 
 export const CLAUDE_LADDER_DOC =
-  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini · mid: Sonnet < Opus < Fable · GPT: Sol < Terra · design: Fable/Grok/Opus/Sonnet";
+  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini · Cursor pool: Composer+Grok · design: Grok first · multi-file UI: Fable · Other(Sonnet/Opus/GPT): when needed";
 
 export const GPT_LADDER_DOC = "Sol < Terra/Codex";
 
@@ -456,34 +456,39 @@ const MODELS: ModelId[] = [
   "Kimi K2.7",
 ];
 
-/** 기본 비중 반영 베이스 점수 */
+/** 기본 비중 — Cursor pool(Composer/Grok) 우선, Other(Sonnet/Fable/Opus/GPT) 절제 */
 const BASE: Record<ModelId, number> = {
-  "Composer 2.5": 40,
-  "Claude Sonnet": 12,
-  "Claude Opus": 6,
+  "Composer 2.5": 42,
+  "Claude Sonnet": 6,
+  "Claude Opus": 3,
   "Opus 5": 2,
-  "Fable 5": 15,
-  "Grok 5.x": 10,
-  "GPT-5 Sol": 4,
-  "GPT-5 Codex": 5,
+  "Fable 5": 8,
+  "Grok 5.x": 22,
+  "GPT-5 Sol": 3,
+  "GPT-5 Codex": 4,
   "Kimi K2.7": 6,
 };
 
 const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
-  ui: { "Fable 5": 35, "Claude Sonnet": 8, "Composer 2.5": 5 },
-  // Codex(Terra) must beat Composer BASE(40); Sol is next if Codex blocked
+  ui: {
+    "Composer 2.5": 18,
+    "Fable 5": 10,
+    "Grok 5.x": 6,
+    "Claude Sonnet": 4,
+  },
+  // Codex(Terra) must beat Composer BASE; Sol is next if Codex blocked
   bug: {
     "GPT-5 Codex": 50,
     "GPT-5 Sol": 45,
-    "Claude Sonnet": 8,
-    "Composer 2.5": 5,
+    "Composer 2.5": 8,
+    "Claude Sonnet": 4,
   },
   architecture: {
-    "Fable 5": 38,
-    "Grok 5.x": 32,
-    "Claude Opus": 28,
-    "Opus 5": 8,
-    "Claude Sonnet": 14,
+    "Grok 5.x": 48,
+    "Fable 5": 10,
+    "Claude Opus": 6,
+    "Opus 5": 4,
+    "Claude Sonnet": 5,
   },
   test: {
     "GPT-5 Codex": 50,
@@ -506,20 +511,20 @@ const KEYWORD_RULES: Array<{
 }> = [
   {
     re: /ui|ux|디자인|화면|레이아웃|프론트|css|스타일|컴포넌트|랜딩|히어로/i,
-    boost: { "Fable 5": 25, "Claude Sonnet": 6, "Composer 2.5": 5 },
+    boost: { "Composer 2.5": 16, "Fable 5": 8, "Grok 5.x": 6, "Claude Sonnet": 4 },
   },
   {
     re: /리팩터|리팩토링|멀티\s*파일|넓은|대규모|코드베이스|아키텍처\s*이해/i,
-    boost: { "Fable 5": 30, "Claude Sonnet": 8, "Composer 2.5": 5 },
+    boost: { "Fable 5": 22, "Composer 2.5": 8, "Grok 5.x": 6, "Claude Sonnet": 4 },
   },
   {
     re: /설계|구조|아키텍처|기술\s*선택|어떻게\s*짤|기획|계획|트레이드.?오프|의사결정/i,
     boost: {
-      "Fable 5": 32,
-      "Grok 5.x": 30,
-      "Claude Opus": 22,
-      "Opus 5": 6,
-      "Claude Sonnet": 10,
+      "Grok 5.x": 42,
+      "Fable 5": 12,
+      "Claude Opus": 8,
+      "Opus 5": 4,
+      "Claude Sonnet": 6,
     },
   },
   {
@@ -536,7 +541,7 @@ const KEYWORD_RULES: Array<{
   },
   {
     re: /ui\s*설계|화면\s*설계|ux\s*설계|와이어|wireframe|컴포넌트\s*설계/i,
-    boost: { "Fable 5": 35, "Claude Sonnet": 22, "Grok 5.x": 18 },
+    boost: { "Grok 5.x": 32, "Fable 5": 18, "Claude Sonnet": 8 },
   },
   {
     re: /ci\s*실패|테스트\s*설계|재현|난해|플레?이키|디버그|버그|회귀|타입\s*에러/i,
@@ -699,8 +704,8 @@ function isQualityBias(cfg?: ProjectConfig): boolean {
 }
 
 /**
- * Product default: save tokens.
- * Unset / cheap / balanced → cheap. Only quality/premium opts out.
+ * Product default: Cursor Models pool first (Composer + Grok), Other restrained.
+ * Unset / cheap / balanced → cursor_pool_bias. Only quality/premium opts out.
  */
 function effectiveSaveBias(
   cfg?: ProjectConfig,
@@ -1013,7 +1018,7 @@ export function analyzeCommand(
   } else if (hard_bug) {
     why = "난해 버그·CI·재현 → Terra/Codex급 필요";
   } else if (architecture && !ui && !implementation) {
-    why = "설계·기획·트레이드오프 → Fable/Grok/Opus/Sonnet 경쟁";
+    why = "설계·기획·트레이드오프 → Grok(Cursor pool) 우선 · Fable은 멀티파일 UI";
   } else if (architecture && implementation) {
     why = "설계+구현 혼합 → 구현 신호 우선(Composer/UI면 Fable)";
   } else if (context_informed && light_ui_copy) {
@@ -1039,7 +1044,7 @@ export function analyzeCommand(
   } else if (follow_up_light || scope === "tiny" || TINY_SCOPE_RE.test(t)) {
     why = "짧은 후속·작은 패치 → lightest tier (호스트별 id)";
   } else if (ui) {
-    why = "일반 UI → Sonnet(절약 기본, Fable 보류)";
+    why = "일반 UI → Composer(Cursor pool) · 멀티파일/레이아웃만 Fable";
   } else if (scope === "broad" || scope === "huge") {
     why = "넓은/대량 범위 → 기계 작업은 Composer, 설계는 Fable";
   } else {
@@ -1303,8 +1308,8 @@ function buildCostAdvice(
       primary === "Claude Sonnet")
   ) {
     return {
-      ko: `${primary} 적합 — 설계·기획은 Fable/Grok/Opus/Sonnet 중 문맥에 맞게 · 구현은 Composer/Sonnet`,
-      en: `${primary} fits design/planning — pick among Fable/Grok/Opus/Sonnet by scope; implement with Composer/Sonnet`,
+      ko: `${primary} 적합 — 설계·기획은 Grok(Cursor pool) 우선 · 멀티파일 UI만 Fable · 구현은 Composer`,
+      en: `${primary} fits design/planning — Grok (Cursor pool) first; Fable for multi-file UI; implement with Composer`,
     };
   }
   if (primary === "Claude Sonnet" && signals.ui && !signals.large_ui) {
@@ -1447,15 +1452,14 @@ function applyProjectConfig(
   opts?: { skipDesignPenalty?: boolean },
 ): void {
   if (saveBias) {
-    scores["Composer 2.5"] += 12;
-    scores["Claude Sonnet"] += 10;
-    scores["GPT-5 Sol"] += 4;
+    scores["Composer 2.5"] += 14;
+    scores["Grok 5.x"] += opts?.skipDesignPenalty ? 12 : 6;
+    scores["Claude Sonnet"] -= 8;
+    scores["Fable 5"] -= 10;
+    scores["Claude Opus"] -= 8;
+    scores["Opus 5"] -= 10;
+    scores["GPT-5 Sol"] -= 4;
     scores["GPT-5 Codex"] -= 6;
-    if (!opts?.skipDesignPenalty) {
-      scores["Grok 5.x"] -= 4;
-      scores["Fable 5"] -= 4;
-      scores["Opus 5"] -= 8;
-    }
   } else if (isQualityBias(cfg)) {
     scores["GPT-5 Codex"] += 8;
     scores["Grok 5.x"] += 6;
@@ -1617,7 +1621,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores["Fable 5"] -= 10;
   }
 
-  // Default save + normal UI: Sonnet over Fable (unless large redesign / layout refactor / light copy)
+  // Default save + normal UI: Composer (Cursor pool) over Other (unless layout refactor / light copy)
   if (
     prefer_cheaper &&
     uiTask &&
@@ -1626,9 +1630,10 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     !signals.light_ui_copy &&
     !signals.ui_layout_refactor
   ) {
-    scores["Claude Sonnet"] += 40;
-    scores["Fable 5"] -= 25;
-    scores["Composer 2.5"] += 8;
+    scores["Composer 2.5"] += 32;
+    scores["Grok 5.x"] += 8;
+    scores["Claude Sonnet"] += 4;
+    scores["Fable 5"] -= 28;
   }
 
   // Layout refactor / multi-file UI → Fable
@@ -1655,18 +1660,20 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     }
   }
 
-  // 설계·기획: Fable/Grok/Opus/Sonnet 경쟁 (Fable 단독 고정 없음)
+  // 설계·기획: Grok(Cursor pool) 우선 — Fable은 UI 리팩터용, Other 절제
   if (signals.architecture && !uiTask && !signals.implementation) {
+    scores["Grok 5.x"] += 22;
+    scores["Fable 5"] -= 8;
     if (signals.budget === "premium") {
-      scores["Grok 5.x"] += 14;
-      scores["Fable 5"] += 10;
-      scores["Opus 5"] += 12;
-      scores["Claude Opus"] += 6;
+      scores["Grok 5.x"] += 10;
+      scores["Opus 5"] += 8;
+      scores["Claude Opus"] += 4;
     }
     if (prefer_cheaper && signals.budget !== "premium") {
-      scores["Claude Sonnet"] += 8;
-      scores["Grok 5.x"] += 2;
-      scores["Opus 5"] -= 10;
+      scores["Grok 5.x"] += 8;
+      scores["Claude Sonnet"] += 2;
+      scores["Opus 5"] -= 12;
+      scores["Fable 5"] -= 6;
     }
   }
 
@@ -1684,7 +1691,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores["Grok 5.x"] -= 8;
   }
 
-  // Extreme difficulty — Opus 5 rarely (premium or explicit)
+  // Extreme difficulty — Opus 5 rarely (premium or explicit); beat Grok on explicit 초대형/최고 난이도
   if (
     !hardBug &&
     !blocked.has("Opus 5") &&
@@ -1697,6 +1704,15 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores["Opus 5"] += 45;
     scores["Fable 5"] += 5;
     scores["Composer 2.5"] -= 20;
+    if (
+      signals.budget === "premium" &&
+      /최고\s*난이도|초대형|극한|opus\s*5|오퍼스\s*5|maximum\s*effort|hardest/i.test(
+        text,
+      )
+    ) {
+      scores["Opus 5"] += 40;
+      scores["Grok 5.x"] -= 25;
+    }
   }
 
   // Copy/i18n/typo / hero slogan / font apply → host lightest logical role
@@ -1775,7 +1791,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       primary = "Fable 5";
     }
   } else if (prefer_cheaper) {
-    // UI quality-cheap: Sonnet (or Composer if Sonnet blocked)
+    // 일반 UI = Composer (Cursor pool). Sonnet/Fable은 멀티파일·레이아웃만.
     if (
       uiTask &&
       !hardBug &&
@@ -1783,14 +1799,12 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       !signals.ui_layout_refactor &&
       !signals.light_ui_copy
     ) {
-      // 일반 UI = Sonnet (절약). Sonnet 불가 시 Composer.
-      let qualityCheap: ModelId = blocked.has("Claude Sonnet")
-        ? "Composer 2.5"
-        : "Claude Sonnet";
-      if (blocked.has(qualityCheap)) qualityCheap = "Composer 2.5";
-      if (primary !== qualityCheap && !blocked.has(qualityCheap)) {
+      const uiPrimary: ModelId = blocked.has("Composer 2.5")
+        ? "Grok 5.x"
+        : "Composer 2.5";
+      if (primary !== uiPrimary && !blocked.has(uiPrimary)) {
         alternative = primary;
-        primary = qualityCheap;
+        primary = uiPrimary;
       }
     } else if (!hardBug && !uiTask && isBulkMechanical(text)) {
       const cheap: ModelId = "Composer 2.5";

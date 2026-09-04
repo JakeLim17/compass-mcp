@@ -33,6 +33,52 @@ Clones (or fast-forward pulls if already cloned) into `~/.compass-mcp`, then run
 
 **Catalog maintenance:** Cursor adds models often. Recheck Task slugs in `src/recommend.ts` / `src/hosts.ts` against [Models & Pricing](https://cursor.com/docs/models-and-pricing) about monthly (or when the Cursor Models picker changes). Then `npm run sync` and toggle MCP in Customize → MCPs.
 
+## Update / deploy (for teammates)
+
+Share these commands when someone already has compass-mcp or needs a fresh install.
+
+### Fresh install (one line, no clone)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JakeLim17/compass-mcp/main/scripts/remote-install.sh \
+  | bash -s -- cursor   # or: claude / codex
+```
+
+Clones (or fast-forward pulls) into `~/.compass-mcp`, runs `npm install` + `npm run build`, writes MCP config. Then **Customize → MCPs → compass-mcp OFF/ON** (or restart Cursor).
+
+### Already cloned — update to latest
+
+```bash
+cd ~/.compass-mcp   # or your clone path, e.g. ~/ChronoCode/compass-mcp
+npm run sync
+```
+
+`npm run sync` does, in order:
+
+1. `git pull --ff-only origin main` (skip if not a git repo)
+2. `npm install`
+3. `npm run build`
+4. `npm test` (smoke)
+
+After sync finishes, **refresh MCP** so Cursor loads the new build:
+
+- **Cursor:** Customize → MCPs → find `compass-mcp` / `user-compass-mcp` → toggle **OFF then ON**
+- Still stale: quit Cursor fully and reopen
+- Agent can also call MCP tool `how_to_refresh_mcp` (host: `cursor`)
+
+### Maintainer: ship a release to GitHub
+
+After merging to `main` locally:
+
+```bash
+cd compass-mcp
+git pull --ff-only origin main
+npm run sync          # verify green before push
+git push origin main  # teammates / remote-install.sh pick this up
+```
+
+Teammates on `remote-install.sh` re-run the same curl one-liner to update; cloned repos use `npm run sync` only.
+
 ## Share / propagate to a teammate
 
 Compass MCP (this repo) pairs with [`cursor-engineering-governance`](https://github.com/JakeLim17/cursor-engineering-governance) (security/engineering rules injected into every Agent chat). To bring a new machine or teammate fully up to date, run both:
@@ -78,9 +124,9 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 |---------------|--------------|
 | Copy, i18n, hyphen/dash punctuation, one-line fix | Composer **Standard** (`composer-2.5` UI; Task `composer-2.5-fast`) |
 | Small code patch | Same light tier — **Standard over Fast** |
-| General UI | Sonnet (`claude-sonnet-5-thinking-high`) |
+| General UI | Composer (`composer-2.5-fast`) — Cursor pool |
 | Multi-file UI / layout refactor | Fable (`claude-fable-5-thinking-high`) |
-| Design, planning, tradeoffs | Grok 4.6 · Fable · Opus · Sonnet |
+| Design, planning, tradeoffs | **Grok 4.6** (`cursor-grok-4.6-high-fast`) — Cursor pool, don’t under-use |
 | Hard bug, CI, type errors | Sol → Terra/Codex (`gpt-5.6-sol-medium` → `gpt-5.6-terra-medium`) |
 | Long codebase / code context | Kimi K2.7 (`kimi-k2.7-code`) |
 | Extreme / huge scope (rare) | Opus 5 (`claude-opus-5-thinking-high`) |
@@ -134,4 +180,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.9+). `npm run connect -- cursor|claude|codex` 한 줄 설치, 또는 클론 없이 `curl -fsSL .../scripts/remote-install.sh | bash -s -- cursor`. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님, Grok/Claude 금지)** — Task slug는 `composer-2.5-fast` fallback. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반). **v0.9.9:** `recommend_model`/`start_session` 결과에 `speed_tier`(fast/standard)·`effort`(low/medium/high/n/a) 필드 추가 — 슬러그 문자열에서 직접 파싱(별도 표 없음). 팀 전파: `docs/SHARE.md`(governance) 또는 이 README §Share.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.10+). **Cursor Models 풀(Composer+Grok) 우선 · Other(Sonnet/Fable/Opus/GPT) 절제** — 설계·기획은 Grok, 멀티파일 UI만 Fable. `npm run connect -- cursor|claude|codex` 한 줄 설치, 또는 클론 없이 `curl -fsSL .../scripts/remote-install.sh | bash -s -- cursor`. **업데이트:** 클론 경로에서 `npm run sync` → Customize → MCPs OFF/ON. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반). **v0.9.10:** Cursor pool 우선 정책(Composer 기본, Grok 설계·기획, Other 절제) + README §Update/deploy. 팀 전파: `docs/SHARE.md`(governance) 또는 이 README §Share.

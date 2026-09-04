@@ -28,7 +28,7 @@ export interface ExamplePrompt {
 }
 
 export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
-  // —— UI → Sonnet (default save; Fable only for large redesign / premium) ——
+  // —— UI: Composer default; Fable only for layout refactor ——
   {
     category: "ui",
     ko: "대시보드 레이아웃 리팩터하고 히어로 섹션 CSS 정리해줘",
@@ -42,7 +42,7 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     ko: "랜딩 페이지 화면 UX 다듬고 컴포넌트 간격 맞춰줘",
     en: "Polish the landing page UX and align component spacing",
     tags: ["ui"],
-    expected_primary: "Claude Sonnet",
+    expected_primary: "Composer 2.5",
   },
   // —— bug → GPT-5 Codex (Terra) ——
   {
@@ -59,32 +59,32 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     tags: ["bug"],
     expected_primary: "GPT-5 Codex",
   },
-  // —— architecture → Fable/Grok/Opus/Sonnet compete (not Claude-only) ——
+  // —— architecture → Grok (Cursor pool) first; Fable for UI-heavy design ——
   {
     category: "architecture",
     ko: "결제 모듈 구조 설계랑 기술 선택 트레이드오프 정리해줘",
     en: "Design the payment module structure and summarize tech-choice trade-offs",
     tags: ["architecture"],
-    expected_primary: "Fable 5",
-    expected_primaries: ["Fable 5", "Grok 5.x", "Claude Opus"],
-    note: "Broad tradeoffs — Fable/Grok/Opus often win; not vendor-locked.",
+    expected_primary: "Grok 5.x",
+    expected_primaries: ["Grok 5.x", "Fable 5", "Claude Opus"],
+    note: "Design/tradeoffs — Grok (Cursor pool) first; Fable when UI refactor involved.",
   },
   {
     category: "architecture",
     ko: "이 기능을 어떻게 짤지 아키텍처 의사결정만 먼저 해줘",
     en: "First decide the architecture for how we should build this feature",
     tags: ["architecture"],
-    expected_primary: "Fable 5",
-    expected_primaries: ["Fable 5", "Grok 5.x", "Claude Opus", "Claude Sonnet"],
+    expected_primary: "Grok 5.x",
+    expected_primaries: ["Grok 5.x", "Fable 5", "Claude Opus", "Claude Sonnet"],
   },
   {
     category: "architecture",
     ko: "간단 계획만 — 다음 스프린트 뭐 할지 짧게 정리",
     en: "Light plan only — briefly outline what to do next sprint",
     tags: ["architecture"],
-    expected_primary: "Claude Sonnet",
-    expected_primaries: ["Claude Sonnet", "Composer 2.5", "Fable 5"],
-    note: "Light planning → Sonnet/Composer may beat Fable.",
+    expected_primary: "Composer 2.5",
+    expected_primaries: ["Composer 2.5", "Grok 5.x", "Claude Sonnet"],
+    note: "Light planning → Composer/Grok may beat Other models.",
   },
   // —— light patch / copy → host lightest (Cursor=Composer, Claude=Haiku) ——
   {
@@ -121,8 +121,8 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Analyze the whole repo structure with long code context",
     tags: ["architecture"],
     expected_primary: "Kimi K2.7",
-    expected_primaries: ["Kimi K2.7", "Claude Sonnet", "Grok 5.x"],
-    note: "Long codebase read → Kimi competes with Sonnet; not Composer.",
+    expected_primaries: ["Kimi K2.7", "Grok 5.x", "Claude Sonnet"],
+    note: "Long codebase read → Kimi; not Fable (multi-file UI only).",
   },
   {
     category: "architecture",
@@ -140,7 +140,7 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
     en: "Recommend a model again — we switched from UI work to bug debugging",
     tags: ["bug"],
     expected_primary: "GPT-5 Codex",
-    note: "Context changed → recommend again; stick_action switch if current was UI/Sonnet.",
+    note: "Context changed → recommend again; stick_action switch if current was UI/Composer.",
   },
   {
     category: "recommend_again",
@@ -156,9 +156,9 @@ export const EXAMPLE_PROMPTS_META = {
   model_persistence:
     "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Default avoids overspend — copy/i18n/hyphen-dash punctuation/hero slogan/font→host lightest (Composer), layout UI refactor→Fable, design→Grok, hard bug→Codex.",
+    "Default: Cursor pool first (Composer + Grok). Copy/i18n/hyphen→Composer, layout UI refactor→Fable, design/plan→Grok, hard bug→Codex. Other(Sonnet/Opus/GPT) only when needed.",
   design_primary_varies:
-    "Design/planning primary is NOT fixed to Claude/Fable — scope & keywords pick among Fable, Grok, Opus, Sonnet. unavailable on host → candidates[1].",
+    "Design/planning primary is Grok (Cursor pool) first — not fixed to Fable/Sonnet. unavailable on host → candidates[1].",
   reading_recommendation:
     "primary / for_task = task recommendation only. The agent or Task worker that called this MCP (e.g. Composer) may differ — check clarity.ko in recommend_model.",
   honest_limit:
