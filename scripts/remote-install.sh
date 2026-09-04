@@ -8,9 +8,9 @@
 #   curl -fsSL .../remote-install.sh | bash -s -- codex
 #
 # Clones (or fast-forward pulls if already cloned) into
-#   ${COMPASS_MCP_LOCAL_DIR:-~/.compass-mcp}, then runs `npm run connect -- <host>`
-#   from that clone — npm install + build happen inside scripts/connect.ts, same
-#   as the manual `git clone && npm run connect -- <host>` flow in README.md.
+#   ${COMPASS_MCP_LOCAL_DIR:-~/.compass-mcp}, then npm install + build + connect.
+#   `npm run connect` uses tsx (devDependency) — must npm install first.
+#   Equivalent to manual: git clone && npm install && npm run build && npm run connect
 #
 # Override clone location: COMPASS_MCP_LOCAL_DIR=/some/path
 # Override source repo:    COMPASS_MCP_REPO_URL=...
@@ -52,5 +52,9 @@ else
 fi
 
 cd "$LOCAL_DIR"
+echo "==> npm install"
+npm install
+echo "==> npm run build"
+npm run build
 echo "==> npm run connect -- $HOST"
 npm run connect -- "$HOST"
