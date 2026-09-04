@@ -124,8 +124,10 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 |---------------|--------------|
 | Copy, i18n, hyphen/dash punctuation, one-line fix | Composer **Standard** (`composer-2.5` UI; Task `composer-2.5-fast`) |
 | Small code patch | Same light tier — **Standard over Fast** |
-| General UI | Composer (`composer-2.5-fast`) — Cursor pool |
-| Multi-file UI / layout refactor | Fable (`claude-fable-5-thinking-high`) |
+| General UI (일상) | Composer (`composer-2.5-fast`) — Cursor pool |
+| General UI (mid, Composer 부족) | Sonnet (`claude-sonnet-5-thinking-high`) |
+| Urgent multi-file UI / layout refactor | Fable (`claude-fable-5-thinking-high`) — **예외만** (토큰 큼) |
+| Broad UI redesign | Sonnet (Fable 아님) |
 | Design, planning, tradeoffs | **Grok 4.6** (`cursor-grok-4.6-high-fast`) — Cursor pool, don’t under-use |
 | Hard bug, CI, type errors | Sol → Terra/Codex (`gpt-5.6-sol-medium` → `gpt-5.6-terra-medium`) |
 | Long codebase / code context | Kimi K2.7 (`kimi-k2.7-code`) |
@@ -142,7 +144,7 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 | `claude-sonnet-5-thinking-high` | General UI / mid Claude | medium | standard | high |
 | `claude-opus-4-8-thinking-high` | Opus 4.8 (legacy) | medium-high | standard | high |
 | `claude-opus-5-thinking-high` | Extreme difficulty (rare) | medium-high | standard | high |
-| `claude-fable-5-thinking-high` | Multi-file UI | medium-high | standard | high |
+| `claude-fable-5-thinking-high` | Urgent multi-file UI only (exception) | medium-high | standard | high |
 | `cursor-grok-4.6-high-fast` | Design / planning (default Grok) | medium-high | **fast** | high |
 | `cursor-grok-4.5-high-fast` | Grok 4.5 legacy | medium-high | **fast** | high |
 | `gpt-5.6-sol-medium` | Lighter bug/CI probe | medium-high | standard | medium |
@@ -180,4 +182,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.10+). **Cursor Models 풀(Composer+Grok) 우선 · Other(Sonnet/Fable/Opus/GPT) 절제** — 설계·기획은 Grok, 멀티파일 UI만 Fable. `npm run connect -- cursor|claude|codex` 한 줄 설치, 또는 클론 없이 `curl -fsSL .../scripts/remote-install.sh | bash -s -- cursor`. **업데이트:** 클론 경로에서 `npm run sync` → Customize → MCPs OFF/ON. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반). **v0.9.10:** Cursor pool 우선 정책(Composer 기본, Grok 설계·기획, Other 절제) + README §Update/deploy. 팀 전파: `docs/SHARE.md`(governance) 또는 이 README §Share.
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.10+). **우선순위: Composer → Grok → Sonnet · Fable 지양(토큰 큼, 긴급 멀티파일 UI·레이아웃 리팩터만 예외)**. `npm run connect -- cursor|claude|codex` 한 줄 설치, 또는 클론 없이 `curl -fsSL .../scripts/remote-install.sh | bash -s -- cursor`. **업데이트:** 클론 경로에서 `npm run sync` → Customize → MCPs OFF/ON. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반). **v0.9.10:** Cursor pool 우선 정책(Composer 기본, Grok 설계·기획, mid UI Sonnet, Fable 강감점) + README §Update/deploy. 팀 전파: `docs/SHARE.md`(governance) 또는 이 README §Share.

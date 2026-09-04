@@ -134,7 +134,7 @@ const RAW_CURSOR_MODEL_CATALOG: RawCursorCatalogEntry[] = [
     logical: "Fable 5",
     task_slug: "claude-fable-5-thinking-high",
     cost_tier: "medium-high",
-    role_ko: "멀티파일 UI·레이아웃 리팩터",
+    role_ko: "긴급 멀티파일 UI·레이아웃 리팩터만 (평소 mid UI는 Sonnet)",
   },
   {
     logical: "Grok 5.x",
@@ -225,7 +225,7 @@ export const CURSOR_CHAT_ONLY = [
 ] as const;
 
 export const FULL_LADDER_DOC =
-  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini/Nano · mid: Sonnet/Opus 4.8/Opus 5/Fable/Grok/Sol/Kimi · high: Terra/Codex";
+  "lightest(host): Cursor=Composer · Claude=Haiku · GPT=Mini/Nano · mid UI: Sonnet · design: Grok · urgent multi-file UI: Fable · high: Terra/Codex";
 
 export const LIGHTEST_BY_HOST_DOC = {
   ko: "Haiku는 Claude light 예시, Cursor light=Composer, GPT light=Mini/Nano — 호스트마다 lightest id가 다름.",
@@ -286,7 +286,7 @@ export const HOST_PROFILES: Record<HostId, HostProfile> = {
       "Claude Sonnet": "role:sonnet",
       "Claude Opus": "role:opus",
       "Opus 5": "role:opus5",
-      "Fable 5": "role:mid",
+      "Fable 5": "role:fable",
       "Grok 5.x": "role:design",
       "GPT-5 Sol": "role:sol",
       "GPT-5 Codex": "role:heavy",
@@ -365,7 +365,7 @@ export function listHostProfiles(): Array<{
       ...(id === "cursor"
         ? {
             ladders:
-              "light: Composer · Cursor pool: Composer+Grok · design/plan: Grok · multi-file UI: Fable · Other(Sonnet/Opus/GPT): when needed · code context: Kimi",
+              "light: Composer · Cursor pool: Composer+Grok · design/plan: Grok · mid UI: Sonnet · urgent multi-file UI: Fable · Other(Opus/GPT): when needed · code context: Kimi",
             cursor_catalog: {
               task_enabled_slugs: CURSOR_TASK_ENABLED_SLUGS,
               standard_slugs: CURSOR_UI_STANDARD_SLUGS,

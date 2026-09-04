@@ -110,12 +110,12 @@ const cases: Case[] = [
     expectPreferCheaper: true,
   },
   {
-    name: "넓은 UI 리디자인 → Fable",
+    name: "넓은 UI 리디자인 → Sonnet",
     input: {
       task_description: "랜딩 히어로 전면 리디자인 — 전체 UI 레이아웃 개편",
       tags: ["ui"],
     },
-    expectPrimary: "Fable 5",
+    expectPrimary: "Claude Sonnet",
     expectPreferCheaper: true,
   },
   {
