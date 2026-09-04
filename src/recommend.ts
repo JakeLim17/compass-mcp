@@ -14,6 +14,9 @@ import {
   isHostIdAvailable,
   hostModelId,
   CURSOR_UI_STANDARD_SLUGS,
+  parseSlugSpeedEffort,
+  type SpeedTier,
+  type EffortLevel,
 } from "./hosts.js";
 import type { ProjectConfig } from "./projectConfig.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -334,6 +337,10 @@ export interface FallbackCandidate {
   id: string;
   slug: string;
   reason?: string;
+  /** Parsed from `slug` (Cursor Task slug) — "fast" (Fast toggle/-fast suffix) or "standard" */
+  speed_tier: SpeedTier;
+  /** Parsed reasoning-effort suffix ("-thinking-high" → high, "-medium" → medium, "n/a" if none) */
+  effort: EffortLevel;
 }
 
 export interface RecommendResult {
@@ -354,6 +361,15 @@ export interface RecommendResult {
   primary_cost_tier: CostTier;
   /** Relative cost/weight of alternative */
   alternative_cost_tier: CostTier;
+  /**
+   * Speed tier parsed straight from primary_slug (Fast toggle / "-fast" suffix
+   * vs Standard). SSOT = slug string — see hosts.parseSlugSpeedEffort.
+   */
+  speed_tier: SpeedTier;
+  /** Reasoning-effort tier parsed from primary_slug ("-thinking-high"/"-medium"/"n/a"). */
+  effort: EffortLevel;
+  alternative_speed_tier: SpeedTier;
+  alternative_effort: EffortLevel;
   /** Coarse tier: low=Composer mid=Sonnet/Opus/Fable/Grok/Sol high=Codex */
   primary_tier: ModelTier;
   alternative_tier: ModelTier;
@@ -401,6 +417,8 @@ export interface RecommendResult {
     primary: ModelId;
     primary_id: string;
     cost_tier: CostTier;
+    speed_tier: SpeedTier;
+    effort: EffortLevel;
   };
   /** One-line KO/EN: recommended model vs caller */
   clarity: UsageEstimate;
@@ -1191,14 +1209,18 @@ export function buildCandidates(
     seen.add(model);
     const slug = CURSOR_TASK_SLUG[model];
     const id = hostModelId(host, model);
+    const resolvedSlug = isCursorCatalogSlug(slug) ? slug : id;
     out.push({
       name: model,
       id,
-      slug: isCursorCatalogSlug(slug) ? slug : id,
+      slug: resolvedSlug,
       reason: candidateReason(
         model,
         out.length === 0 ? "primary" : out.length === 1 ? "alternative" : "fallback",
       ),
+      // Always parsed from the real Cursor Task slug (CURSOR_TASK_SLUG[model]),
+      // even on non-cursor hosts, so speed/effort stay meaningful cross-host.
+      ...parseSlugSpeedEffort(isCursorCatalogSlug(slug) ? slug : ""),
     });
     if (out.length >= 5) break;
   }
@@ -1206,11 +1228,13 @@ export function buildCandidates(
   // Ensure at least primary attempt even if host map is odd
   if (out.length === 0) {
     const slug = CURSOR_TASK_SLUG[primary];
+    const resolvedSlug = isCursorCatalogSlug(slug) ? slug : hostModelId(host, primary);
     out.push({
       name: primary,
       id: hostModelId(host, primary),
-      slug: isCursorCatalogSlug(slug) ? slug : hostModelId(host, primary),
+      slug: resolvedSlug,
       reason: "task-fit primary",
+      ...parseSlugSpeedEffort(isCursorCatalogSlug(slug) ? slug : ""),
     });
   }
   return out;
@@ -1905,6 +1929,11 @@ export function recommendModel(input: RecommendInput): RecommendResult {
   const primary_id = hostModelId(host, primary);
   const primary_cost_tier = COST_TIER[primary];
   const uiRec = buildUiRecommendation(primary, primary_id, signals);
+  const { speed_tier, effort } = parseSlugSpeedEffort(primary_slug);
+  const {
+    speed_tier: alternative_speed_tier,
+    effort: alternative_effort,
+  } = parseSlugSpeedEffort(alternative_slug);
 
   const base: RecommendResult = {
     primary,
@@ -1918,6 +1947,10 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     alternative_id: hostModelId(host, alternative),
     primary_cost_tier,
     alternative_cost_tier: COST_TIER[alternative],
+    speed_tier,
+    effort,
+    alternative_speed_tier,
+    alternative_effort,
     primary_tier: MODEL_TIER[primary],
     alternative_tier: MODEL_TIER[alternative],
     token_risk,
@@ -1938,6 +1971,8 @@ export function recommendModel(input: RecommendInput): RecommendResult {
       primary,
       primary_id,
       cost_tier: primary_cost_tier,
+      speed_tier,
+      effort,
     },
     clarity: { ko: "", en: "" },
     cost_preview: buildCostPreview(
@@ -1996,6 +2031,8 @@ export function buildRecommendClarity(result: RecommendResult): {
     primary,
     primary_id,
     primary_cost_tier,
+    speed_tier,
+    effort,
     cost_preview,
     model_persistence,
     verbal_override,
@@ -2025,6 +2062,8 @@ export function buildRecommendClarity(result: RecommendResult): {
       primary,
       primary_id,
       cost_tier: primary_cost_tier,
+      speed_tier,
+      effort,
     },
     clarity: {
       ko: `작업용 추천: ${primary} (${primary_id}, ${weightKo}).${verbalKo} ${cost_preview.advice.ko}.${persistKo} MCP 호출 모델과 별개.`,
@@ -2092,6 +2131,8 @@ export function compactGateRecommend(
   return {
     primary_id: result.primary_id,
     copy_task_model: result.primary_id,
+    speed_tier: result.speed_tier,
+    effort: result.effort,
     must_do: {
       task_model: must_do.task_model,
       fallback_model: must_do.fallback_model,
@@ -2130,6 +2171,8 @@ export function compactRecommendResult(
     honest_limit,
     primary_slug: result.primary_slug,
     primary_id: result.primary_id,
+    speed_tier: result.speed_tier,
+    effort: result.effort,
     cheaper_fallback_slug: result.cheaper_fallback_slug,
     candidates: result.candidates,
     fallback_chain: result.fallback_chain,

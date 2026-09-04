@@ -18,6 +18,36 @@ import type { ModelId, CostTier } from "./recommend.js";
 
 export type HostId = "cursor" | "claude" | "openai" | "generic";
 
+/**
+ * Speed tier parsed from the Cursor slug itself (SSOT = slug string, no separate
+ * hand-maintained map that can drift). "-fast" suffix → fast; otherwise standard
+ * (chat UI "Fast" toggle off, or a model family that has no fast variant).
+ */
+export type SpeedTier = "fast" | "standard";
+
+/**
+ * Reasoning-effort tier parsed from the slug (e.g. "-thinking-high" → high,
+ * "-medium" → medium). "n/a" when the family has no effort suffix (Composer, Kimi).
+ */
+export type EffortLevel = "low" | "medium" | "high" | "n/a";
+
+/**
+ * Parse speed_tier + effort straight from a Cursor Task/UI slug.
+ * Never hand-maintain a parallel table — every new slug is classified the same way.
+ */
+export function parseSlugSpeedEffort(slug: string): {
+  speed_tier: SpeedTier;
+  effort: EffortLevel;
+} {
+  const s = (slug ?? "").toLowerCase();
+  const speed_tier: SpeedTier = /-fast(-|$)/.test(s) ? "fast" : "standard";
+  let effort: EffortLevel = "n/a";
+  if (/-high(-|$)/.test(s)) effort = "high";
+  else if (/-medium(-|$)/.test(s)) effort = "medium";
+  else if (/-low(-|$)/.test(s)) effort = "low";
+  return { speed_tier, effort };
+}
+
 /** Logical ModelId used in scoring for the lightest daily / copy tier */
 export const LIGHTEST_LOGICAL: ModelId = "Composer 2.5";
 
@@ -64,15 +94,16 @@ const CURSOR_IDS: Record<ModelId, string> = {
   "Kimi K2.7": "kimi-k2.7-code",
 };
 
-/** Full Cursor representative catalog — Task slugs + UI Standard (docs / list_hosts) */
-export const CURSOR_MODEL_CATALOG: Array<{
+interface RawCursorCatalogEntry {
   logical: ModelId;
   task_slug: string;
   ui_slug?: string;
   cost_tier: CostTier;
   role_ko: string;
   legacy?: boolean;
-}> = [
+}
+
+const RAW_CURSOR_MODEL_CATALOG: RawCursorCatalogEntry[] = [
   {
     logical: "Composer 2.5",
     task_slug: "composer-2.5-fast",
@@ -137,6 +168,18 @@ export const CURSOR_MODEL_CATALOG: Array<{
     role_ko: "긴 코드 컨텍스트·대형 리포",
   },
 ];
+
+/**
+ * Full Cursor representative catalog — Task slugs + UI Standard (docs / list_hosts).
+ * speed_tier/effort are **derived from task_slug** via parseSlugSpeedEffort — never
+ * hand-duplicated, so they cannot drift out of sync with the slug string.
+ */
+export const CURSOR_MODEL_CATALOG: Array<
+  RawCursorCatalogEntry & { speed_tier: SpeedTier; effort: EffortLevel }
+> = RAW_CURSOR_MODEL_CATALOG.map((entry) => ({
+  ...entry,
+  ...parseSlugSpeedEffort(entry.task_slug),
+}));
 
 /** Chat UI Standard slugs (not Task defaults) */
 export const CURSOR_UI_STANDARD_SLUGS = ["composer-2.5"] as const;

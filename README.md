@@ -22,7 +22,43 @@ Then restart the app. On Cursor: sidebar **Customize → MCPs** → toggle off a
 
 Not on npm — clone from GitHub. Updates: `npm run sync`.
 
+### One-command install (no manual clone) — for sharing with teammates
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JakeLim17/compass-mcp/main/scripts/remote-install.sh \
+  | bash -s -- cursor   # or: claude / codex
+```
+
+Clones (or fast-forward pulls if already cloned) into `~/.compass-mcp`, then runs `npm run connect -- <host>` — same install/update path as above, one line. Override with `COMPASS_MCP_LOCAL_DIR=` / `COMPASS_MCP_REPO_URL=` env vars. Re-running the same command later is the update path (equivalent to `npm run sync` + re-toggling the MCP).
+
 **Catalog maintenance:** Cursor adds models often. Recheck Task slugs in `src/recommend.ts` / `src/hosts.ts` against [Models & Pricing](https://cursor.com/docs/models-and-pricing) about monthly (or when the Cursor Models picker changes). Then `npm run sync` and toggle MCP in Customize → MCPs.
+
+## Share / propagate to a teammate
+
+Compass MCP (this repo) pairs with [`cursor-engineering-governance`](https://github.com/JakeLim17/cursor-engineering-governance) (security/engineering rules injected into every Agent chat). To bring a new machine or teammate fully up to date, run both:
+
+```bash
+# 1) engineering-governance rules (alwaysApply rules + account-map)
+curl -fsSL https://raw.githubusercontent.com/JakeLim17/cursor-engineering-governance/main/install.sh \
+  | bash -s -- --from-remote
+
+# 2) compass-mcp (model routing MCP)
+curl -fsSL https://raw.githubusercontent.com/JakeLim17/compass-mcp/main/scripts/remote-install.sh \
+  | bash -s -- cursor
+
+# 3) reconnect the MCP in Cursor
+# Customize → MCPs → toggle compass-mcp OFF then ON (or restart Cursor)
+```
+
+Already have both cloned locally? Same idea, shorter:
+
+```bash
+cd cursor-engineering-governance && git pull --ff-only && ./install.sh --skip-accounts
+cd ../compass-mcp && npm run sync
+# then: Customize → MCPs → toggle compass-mcp OFF/ON
+```
+
+See `cursor-engineering-governance/README.md` §Share for the full governance-side procedure and flags.
 
 ## Use it
 
@@ -51,21 +87,27 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 
 ### Cursor catalog (Task slugs)
 
-| Slug | Role | Cost tier |
-|------|------|-----------|
-| `composer-2.5` | Chat UI Standard (light work) | low |
-| `composer-2.5-fast` | Task fallback for Composer | low |
-| `claude-sonnet-5-thinking-high` | General UI / mid Claude | medium |
-| `claude-opus-4-8-thinking-high` | Opus 4.8 (legacy) | medium-high |
-| `claude-opus-5-thinking-high` | Extreme difficulty (rare) | medium-high |
-| `claude-fable-5-thinking-high` | Multi-file UI | medium-high |
-| `cursor-grok-4.6-high-fast` | Design / planning (default Grok) | medium-high |
-| `cursor-grok-4.5-high-fast` | Grok 4.5 legacy | medium-high |
-| `gpt-5.6-sol-medium` | Lighter bug/CI probe | medium-high |
-| `gpt-5.6-terra-medium` | Hard bug / Terra | high |
-| `kimi-k2.7-code` | Long code context | medium |
+**Speed tier** (`speed_tier`) and **effort** (`effort`) are **parsed straight from the slug string** — not a hand-maintained side table — via `hosts.parseSlugSpeedEffort(slug)`. `-fast` suffix → `speed_tier: "fast"`; otherwise `"standard"` (chat UI "Fast" toggle off, or a family with no fast variant). `-thinking-high`/`-high` → `effort: "high"`, `-medium` → `"medium"`, `"n/a"` when the family has no effort suffix (Composer, Kimi).
 
-"Lightest" depends on the host — Cursor's cheap slot is Composer, not Haiku. If the top pick isn't available, it falls back to the next in the list.
+| Slug | Role | Cost tier | Speed tier | Effort |
+|------|------|-----------|------------|--------|
+| `composer-2.5` | Chat UI Standard (light work) | low | standard | n/a |
+| `composer-2.5-fast` | Task fallback for Composer | low | **fast** | n/a |
+| `claude-sonnet-5-thinking-high` | General UI / mid Claude | medium | standard | high |
+| `claude-opus-4-8-thinking-high` | Opus 4.8 (legacy) | medium-high | standard | high |
+| `claude-opus-5-thinking-high` | Extreme difficulty (rare) | medium-high | standard | high |
+| `claude-fable-5-thinking-high` | Multi-file UI | medium-high | standard | high |
+| `cursor-grok-4.6-high-fast` | Design / planning (default Grok) | medium-high | **fast** | high |
+| `cursor-grok-4.5-high-fast` | Grok 4.5 legacy | medium-high | **fast** | high |
+| `gpt-5.6-sol-medium` | Lighter bug/CI probe | medium-high | standard | medium |
+| `gpt-5.6-terra-medium` | Hard bug / Terra | high | standard | medium |
+| `kimi-k2.7-code` | Long code context | medium | standard | n/a |
+
+Notes:
+- **Only Composer has a real Standard-vs-Fast pair today** (`composer-2.5` UI Standard vs `composer-2.5-fast` Task). Every other family's catalog slug is Fast-only (Grok) or has no Fast variant at all (Sonnet/Opus/Fable/Sol/Terra/Kimi) — for those, "standard" in the table above means "not a `-fast` slug", not "a verified non-Fast Task option exists". Grok 4.6/4.5 Standard (non-Fast) is chat-UI-only today (turn Fast off in the picker); there is no non-Fast Task slug yet — recheck against [Models & Pricing](https://cursor.com/docs/models-and-pricing).
+- `effort` reflects the reasoning-effort suffix in the slug name (Anthropic "thinking-high", GPT "medium"), not a separate universal 3-level scale Cursor exposes for every model — some families (Composer, Kimi) simply don't have one (`n/a`).
+- `recommend_model` / `start_session` results now include top-level `speed_tier` + `effort` (for the primary pick) and per-candidate `speed_tier`/`effort` on every `candidates[]` entry — see [Use it](#use-it) output shape below.
+- "Lightest" depends on the host — Cursor's cheap slot is Composer, not Haiku. If the top pick isn't available, it falls back to the next in the list.
 
 ## Limits
 
@@ -92,4 +134,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.8+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님, Grok/Claude 금지)** — Task slug는 `composer-2.5-fast` fallback. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.9+). `npm run connect -- cursor|claude|codex` 한 줄 설치, 또는 클론 없이 `curl -fsSL .../scripts/remote-install.sh | bash -s -- cursor`. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님, Grok/Claude 금지)** — Task slug는 `composer-2.5-fast` fallback. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반). **v0.9.9:** `recommend_model`/`start_session` 결과에 `speed_tier`(fast/standard)·`effort`(low/medium/high/n/a) 필드 추가 — 슬러그 문자열에서 직접 파싱(별도 표 없음). 팀 전파: `docs/SHARE.md`(governance) 또는 이 README §Share.

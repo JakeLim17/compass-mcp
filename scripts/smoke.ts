@@ -22,6 +22,7 @@ import {
   type CostTier,
   type TokenRisk,
 } from "../src/recommend.ts";
+import { CURSOR_MODEL_CATALOG, parseSlugSpeedEffort } from "../src/hosts.ts";
 import { clearSticky, getSticky, setSticky } from "../src/sticky.ts";
 import {
   buildHowToRefreshMcp,
@@ -978,6 +979,40 @@ try {
   );
   extraChecks += 1;
   if (!catalogOk) failed += 1;
+}
+
+{
+  // speed_tier/effort — parsed from slug, exposed on recommend result + candidates + catalog
+  const light = recommendModel({ task_description: "하이픈만 고쳐줘" });
+  const layout = recommendModel({
+    task_description: "대시보드 레이아웃 리팩터해줘",
+    tags: ["ui"],
+  });
+  const bug = recommendModel({ task_description: "CI 실패 재현해줘", tags: ["bug"] });
+  const compact = compactRecommendResult(light);
+  const gate = compactGateRecommend(light);
+  const grokEntry = CURSOR_MODEL_CATALOG.find(
+    (c) => c.task_slug === "cursor-grok-4.6-high-fast",
+  );
+  const speedEffortOk =
+    light.speed_tier === "fast" &&
+    light.effort === "n/a" &&
+    layout.speed_tier === "standard" &&
+    layout.effort === "high" &&
+    bug.speed_tier === "standard" &&
+    bug.effort === "medium" &&
+    light.candidates[0]?.speed_tier === "fast" &&
+    (compact as { speed_tier?: string }).speed_tier === "fast" &&
+    (gate as { speed_tier?: string }).speed_tier === "fast" &&
+    grokEntry?.speed_tier === "fast" &&
+    grokEntry?.effort === "high" &&
+    parseSlugSpeedEffort("composer-2.5").speed_tier === "standard" &&
+    parseSlugSpeedEffort("gpt-5.6-sol-medium").effort === "medium";
+  console.log(
+    `[${speedEffortOk ? "OK" : "FAIL"}] speed_tier/effort light=${light.speed_tier}/${light.effort} layout=${layout.speed_tier}/${layout.effort} bug=${bug.speed_tier}/${bug.effort}`,
+  );
+  extraChecks += 1;
+  if (!speedEffortOk) failed += 1;
 }
 
 {
