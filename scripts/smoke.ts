@@ -71,6 +71,19 @@ const cases: Case[] = [
     expectPreferCheaper: true,
   },
   {
+    name: "하이픈·구두점만 → Composer",
+    input: { task_description: "en-em 대시를 ASCII 하이픈으로만 바꿔줘" },
+    expectPrimary: "Composer 2.5",
+    expectCost: "low",
+    expectPreferCheaper: true,
+  },
+  {
+    name: "copy-only punctuation → Composer",
+    input: { task_description: "copy-only punctuation: replace em-dash with ASCII hyphen" },
+    expectPrimary: "Composer 2.5",
+    expectCost: "low",
+  },
+  {
     name: "UI 태그 → Fable(레이아웃 리팩터)",
     input: { task_description: "대시보드 레이아웃 리팩터", tags: ["ui"] },
     expectPrimary: "Fable 5",
@@ -313,19 +326,25 @@ let extraChecks = 0;
     tags: ["ui"],
   });
   const i18n = recommendModel({ task_description: "로그인 문구 i18n 한 줄" });
+  const hyphen = recommendModel({
+    task_description: "en-em 대시를 ASCII 하이픈으로만 바꿔줘",
+  });
   const heroSignals = analyzeCommand(
     "히어로 영어 슬로건 바꾸고 폰트 적용 고쳐줘",
     ["ui"],
   );
+  const hyphenSignals = analyzeCommand("en-em 대시를 ASCII 하이픈으로만 바꿔줘");
   const ok =
     hero.primary === "Composer 2.5" &&
     heroSignals.light_ui_copy === true &&
     layout.primary === "Fable 5" &&
     i18n.primary === "Composer 2.5" &&
+    hyphen.primary === "Composer 2.5" &&
+    hyphenSignals.copy_only === true &&
     hero.cost_preview.advice.ko.includes("히어로") &&
     hero.cost_preview.advice.ko.includes("Fable");
   console.log(
-    `[${ok ? "OK" : "FAIL"}] light_ui_copy hero=${hero.primary} layout=${layout.primary} i18n=${i18n.primary}`,
+    `[${ok ? "OK" : "FAIL"}] light_ui_copy hero=${hero.primary} layout=${layout.primary} i18n=${i18n.primary} hyphen=${hyphen.primary}`,
   );
   extraChecks += 1;
   if (!ok) failed += 1;

@@ -1,7 +1,7 @@
 /**
  * ChronoCode model scoring SSOT.
  * Goal: task-fit model — not “always cheapest”, not vendor-locked.
- * Light patch / copy → host lightest (Cursor=Composer, Claude=Haiku, GPT=Mini) · UI → Sonnet/Fable
+ * Light patch / copy / hyphen-punctuation → host lightest (Cursor=Composer, Claude=Haiku, GPT=Mini) · UI → Sonnet/Fable
  * · design/plan → Fable/Grok/Opus/Sonnet · hard CI/bug → Codex/Terra.
  * Claude ladder: lightest < Sonnet < Opus < Fable · GPT: Sol < Terra/Codex
  * Only recommend Cursor catalog slugs for host=cursor.
@@ -475,6 +475,13 @@ const TAG_BOOST: Record<Tag, Partial<Record<ModelId, number>>> = {
   },
 };
 
+/**
+ * Punctuation / hyphen-only — Composer (not Grok/Fable).
+ * `대시(?!보드)` avoids 대시보드; `\bdash\b` avoids dashboard.
+ */
+export const PUNCTUATION_ONLY_RE =
+  /하이픈|\bhyphen\b|\bpunctuation\b|구두점|copy[- ]?only|string[- ]?only|문자\s*만|문자\s*수정|en[- ]?dash|em[- ]?dash|엔\s*대시|엠\s*대시|전각\s*대시|반각\s*대시|대시(?!보드)|\bdash\b/i;
+
 const KEYWORD_RULES: Array<{
   re: RegExp;
   boost: Partial<Record<ModelId, number>>;
@@ -523,8 +530,17 @@ const KEYWORD_RULES: Array<{
     },
   },
   {
-    re: /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|슬로건|slogan|cta\s*텍스트|hero\s*text/i,
+    re: /i18n|문구|카피|타이포|typo|copy\s*edit|copy[- ]?only|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|슬로건|slogan|cta\s*텍스트|hero\s*text/i,
     boost: { [LIGHTEST_LOGICAL]: 45 },
+  },
+  {
+    re: PUNCTUATION_ONLY_RE,
+    boost: {
+      [LIGHTEST_LOGICAL]: 55,
+      "Grok 5.x": -22,
+      "Fable 5": -18,
+      "Claude Sonnet": -10,
+    },
   },
   {
     re: /font|글꼴|폰트|typography|font-family|fontFamily/i,
@@ -560,7 +576,7 @@ const HIGH_TOKEN_RE =
 
 /** Small/cheap jobs — quality-first stays on Composer naturally */
 const LOW_TOKEN_RE =
-  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*수정|작은\s*(수정|패치|카피|문구)|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|슬로건|slogan|폰트|글꼴|font|히어로\s*영어|영어\s*슬로건/i;
+  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*수정|작은\s*(수정|패치|카피|문구)|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|슬로건|slogan|폰트|글꼴|font|히어로\s*영어|영어\s*슬로건|하이픈|구두점|punctuation|copy[- ]?only/i;
 
 /** Hard debug / CI — keep Terra/Codex even when tokens are high */
 const HARD_BUG_RE =
@@ -707,7 +723,7 @@ export function isLongCodeContextTask(text: string, tags: Tag[] = []): boolean {
 
 /** Copy/i18n/typo only — host lightest tier (not mid models) */
 export const COPY_ONLY_RE =
-  /i18n|문구|카피|타이포|typo|copy\s*edit|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|문구\s*만|카피\s*만|슬로건|slogan|cta\s*텍스트|cta\s*문구|hero\s*text|subtitle|서브타이틀/i;
+  /i18n|문구|카피|타이포|typo|copy\s*edit|copy[- ]?only|문구\s*수정|카피\s*한\s*줄|로그인\s*문구|문구\s*만|카피\s*만|슬로건|slogan|cta\s*텍스트|cta\s*문구|hero\s*text|subtitle|서브타이틀/i;
 
 /** Hero/landing copy tweaks — still light tier even when UI keywords appear */
 export const LIGHT_COPY_RE =
@@ -730,7 +746,7 @@ export const UI_LAYOUT_REFACTOR_RE =
   /레이아웃\s*리팩터|layout\s*refactor|대시보드\s*레이아웃\s*(?:리팩터|개편|구조)|ui\s*리팩터|컴포넌트\s*구조\s*(변경|리팩터)|멀티\s*파일\s*ui|화면\s*구조\s*개편|design\s*system\s*정리/i;
 
 const TINY_SCOPE_RE =
-  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*만|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|작은\s*(수정|패치)/i;
+  /한\s*줄|one[- ]?line|i18n|타이포|typo|문구\s*만|주석\s*만|lint\s*만|퀵\s*(픽스|패치)|hot\s*fix|카피\s*한\s*줄|작은\s*(수정|패치)|하이픈|구두점|punctuation|copy[- ]?only/i;
 
 /** Short follow-up in same chat — treat as light tier (no keep on Fable/Codex) */
 export const FOLLOW_UP_LIGHT_RE =
@@ -777,7 +793,8 @@ export function shouldForceTierSwitch(
 }
 
 export function isCopyOnlyTask(text: string): boolean {
-  return COPY_ONLY_RE.test(text ?? "");
+  const t = text ?? "";
+  return COPY_ONLY_RE.test(t) || PUNCTUATION_ONLY_RE.test(t);
 }
 
 /** Hero copy / font apply / narrow CTA — Composer even when UI keywords present */
@@ -996,7 +1013,9 @@ export function analyzeCommand(
   } else if (long_code_context) {
     why = "긴 코드 컨텍스트·대형 리포 분석 → Kimi (설계/기획 아님)";
   } else if (copy_only) {
-    why = "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
+    why = PUNCTUATION_ONLY_RE.test(t)
+      ? "하이픈·대시·구두점·copy-only → 호스트 lightest (Cursor=Composer Standard)"
+      : "문구/i18n/타이포 → 호스트 lightest (Cursor=Composer, Claude=Haiku, GPT=Mini)";
   } else if (light_ui_copy) {
     why = "히어로 문구·폰트·슬로건 → Composer (UI 키워드만으로 Fable/Sonnet 금지)";
   } else if (follow_up_light || scope === "tiny" || TINY_SCOPE_RE.test(t)) {
@@ -1665,6 +1684,7 @@ export function recommendModel(input: RecommendInput): RecommendResult {
     scores[LIGHTEST_LOGICAL] += signals.light_ui_copy ? 65 : 40;
     scores["Fable 5"] -= signals.light_ui_copy ? 35 : 12;
     scores["Claude Sonnet"] -= signals.light_ui_copy ? 30 : 0;
+    scores["Grok 5.x"] -= 25;
     scores["GPT-5 Codex"] -= 10;
   }
 

@@ -40,7 +40,7 @@ Say a model name if you want (`페이블로`, `use codex`) — that wins over th
 
 | You're doing… | Typical pick |
 |---------------|--------------|
-| Copy, i18n, one-line fix | Composer **Standard** (`composer-2.5` UI; Task `composer-2.5-fast`) |
+| Copy, i18n, hyphen/dash punctuation, one-line fix | Composer **Standard** (`composer-2.5` UI; Task `composer-2.5-fast`) |
 | Small code patch | Same light tier — **Standard over Fast** |
 | General UI | Sonnet (`claude-sonnet-5-thinking-high`) |
 | Multi-file UI / layout refactor | Fable (`claude-fable-5-thinking-high`) |
@@ -92,4 +92,4 @@ MIT
 
 ---
 
-**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.7+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 작업은 Composer 2.5 Standard(Fast 아님)** — Task slug는 `composer-2.5-fast` fallback, 채팅 UI는 Standard 권장. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).
+**한국어:** 작업 문장 보고 모델 추천하는 로컬 MCP (v0.9.8+). `npm run connect -- cursor|claude|codex` 한 줄 설치. **간단 문자·카피·하이픈/구두점·i18n은 Composer 2.5 Standard(Fast 아님, Grok/Claude 금지)** — Task slug는 `composer-2.5-fast` fallback. Cursor 대표 모델 전체( Sonnet/Opus 4.8·5/Fable/Grok/Sol/Terra/Kimi ) 카탈로그 정렬. `copy_task_model`을 Task `model=`에 복사해야 함(말만 switch=위반).

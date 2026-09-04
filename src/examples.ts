@@ -104,6 +104,13 @@ export const EXAMPLE_PROMPTS: ExamplePrompt[] = [
   },
   {
     category: "light_patch",
+    ko: "en-em 대시를 ASCII 하이픈으로만 바꿔줘",
+    en: "Replace en/em dashes with ASCII hyphens only (copy-only punctuation)",
+    expected_primary: "Composer 2.5",
+    note: "Punctuation/hyphen-only → Composer Standard, not Grok/Fable.",
+  },
+  {
+    category: "light_patch",
     ko: "타이포 주석 정리하고 lint 경고 작은 핫픽스만",
     en: "Tiny hotfix: tidy a typo comment and a small lint warning",
     expected_primary: "Composer 2.5",
@@ -149,7 +156,7 @@ export const EXAMPLE_PROMPTS_META = {
   model_persistence:
     "Same kind of work → keep the adopted model (no re-ask). Task type changed → call recommend_model again; on switch, tell the user via model_persistence (not the word sticky).",
   save_vs_quality:
-    "Default avoids overspend — copy/i18n/hero slogan/font→host lightest, layout UI refactor→Fable, hard bug→Codex.",
+    "Default avoids overspend — copy/i18n/hyphen-dash punctuation/hero slogan/font→host lightest (Composer), layout UI refactor→Fable, design→Grok, hard bug→Codex.",
   design_primary_varies:
     "Design/planning primary is NOT fixed to Claude/Fable — scope & keywords pick among Fable, Grok, Opus, Sonnet. unavailable on host → candidates[1].",
   reading_recommendation:

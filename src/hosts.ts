@@ -78,7 +78,7 @@ export const CURSOR_MODEL_CATALOG: Array<{
     task_slug: "composer-2.5-fast",
     ui_slug: "composer-2.5",
     cost_tier: "low",
-    role_ko: "가벼운 패치·i18n·일상 루프 (UI=Standard, Task=fast fallback)",
+    role_ko: "가벼운 패치·i18n·구두점(하이픈·대시)·일상 루프 (UI=Standard, Task=fast fallback)",
   },
   {
     logical: "Claude Sonnet",
